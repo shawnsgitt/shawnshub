@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0f1a">
+<title>Finance Hub</title>
+<link rel="manifest" href="/manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0f1a;--s1:#111827;--s2:#1a2235;--card:#1e293b;--border:#2d3a52;--text:#f1f5f9;--muted:#94a3b8;--dim:#64748b;--green:#22c55e;--gbg:rgba(34,197,94,.1);--red:#ef4444;--rbg:rgba(239,68,68,.1);--purple:#a855f7;--pbg:rgba(168,85,247,.1);--amber:#f59e0b;--abg:rgba(245,158,11,.1);--blue:#3b82f6;--teal:#14b8a6;--coral:#f97316;--pink:#ec4899}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding:0 0 88px;overflow-x:hidden}
+.wrap{max-width:520px;margin:0 auto;padding:0 16px}
+.head{padding:max(env(safe-area-inset-top),16px) 0 12px;display:flex;align-items:center;justify-content:space-between}
+.head h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.live{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.kgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.k{border-radius:14px;padding:14px 16px;border:1px solid var(--border)}
+.k .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+.k .v{font-size:24px;font-weight:700;letter-spacing:-.5px}
+.k .sub{font-size:11px;margin-top:3px;color:var(--muted)}
+.k.g{background:var(--gbg);border-color:rgba(34,197,94,.15)}.k.g .v{color:var(--green)}
+.k.r{background:var(--rbg);border-color:rgba(239,68,68,.15)}.k.r .v{color:var(--red)}
+.k.p{background:var(--pbg);border-color:rgba(168,85,247,.15)}.k.p .v{color:var(--purple)}
+.k.a{background:var(--abg);border-color:rgba(245,158,11,.15)}.k.a .v{color:var(--amber)}
+.sec{margin-bottom:22px}
+.stitle{font-size:13px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+.ccard{background:var(--card);border-radius:14px;padding:16px;border:1px solid var(--border);margin-bottom:12px}
+.ccard h3{font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:500}
+.cwrap{position:relative;height:200px}
+.row{display:flex;align-items:center;gap:10px;background:var(--s1);border-radius:12px;padding:11px 14px;margin-bottom:6px}
+.dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.rname{flex:1;font-size:13px;font-weight:500}
+.ramt{font-size:13px;font-weight:700}
+.rbar{width:100%;height:3px;background:var(--border);border-radius:2px;margin-top:5px}
+.rbar span{display:block;height:3px;border-radius:2px;transition:width .8s ease}
+.gcard{background:var(--card);border-radius:14px;padding:14px 16px;border:1px solid var(--border);margin-bottom:8px}
+.gtop{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.gname{font-size:14px;font-weight:600}
+.gpct{font-size:18px;font-weight:700;color:var(--purple)}
+.gbar{width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.gbar span{display:block;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--purple),var(--blue));transition:width 1s ease}
+.gamts{display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--muted)}
+.srow{display:flex;align-items:center;justify-content:space-between;background:var(--s1);border-radius:12px;padding:11px 14px;margin-bottom:6px}
+.sleft{display:flex;align-items:center;gap:8px}
+.badge{font-size:9px;padding:3px 7px;border-radius:5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.badge.ess{background:var(--gbg);color:var(--green)}
+.badge.nice{background:var(--abg);color:var(--amber)}
+.badge.canc{background:var(--rbg);color:var(--red)}
+.sname{font-size:13px;font-weight:500}
+.samt{font-size:13px;font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--border);display:flex;justify-content:center;gap:28px;padding:10px 0 max(env(safe-area-inset-bottom),10px);z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(17,24,39,.85)}
+.ni{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim);font-size:10px;font-weight:500;cursor:pointer;transition:color .15s;-webkit-tap-highlight-color:transparent}
+.ni.on{color:var(--purple)}
+.ni svg{width:20px;height:20px}
+.load{display:flex;flex-direction:column;align-items:center;justify-content:center;height:70vh;gap:14px}
+.spin{width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.load p{color:var(--muted);font-size:13px}
+.err{background:var(--rbg);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;color:var(--red);font-size:13px;text-align:center;margin:40px 16px}
+.fi{animation:fi .35s ease both;opacity:0}
+@keyframes fi{to{opacity:1}}
+@media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}.cwrap{height:240px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="load" id="ld"><div class="spin"></div><p>Loading finances...</p></div></div>
+<nav>
+<div class="ni on" data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></div>
+<div class="ni" data-v="spending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg><span>Spending</span></div>
+<div class="ni" data-v="goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Goals</span></div>
+<div class="ni" data-v="subs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span>Subs</span></div>
+</nav>
+<script>
+var C={Groceries:"#22c55e",Transport:"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316",Utilities:"#8b5cf6",Shopping:"#ec4899",Subscriptions:"#06b6d4",Education:"#6366f1",Fitness:"#14b8a6",Investments:"#f59e0b",Miscellaneous:"#64748b",Savings:"#a855f7",Income:"#22c55e"};
+function cc(n){return C[n]||"#64748b"}
+function f(n){return n==null?"£0":"£"+Math.round(n).toLocaleString("en-GB")}
+var D=null,charts={},cv="overview";
+document.querySelectorAll(".ni").forEach(function(el){el.addEventListener("click",function(){cv=el.dataset.v;document.querySelectorAll(".ni").forEach(function(e){e.classList.toggle("on",e.dataset.v===cv)});Object.values(charts).forEach(function(c){c.destroy()});charts={};render()})});
+async function load(){try{var r=await fetch("/api/finance");if(!r.ok)throw new Error("API "+r.status);D=await r.json();if(D.error)throw new Error(D.error);render()}catch(e){document.getElementById("app").innerHTML='<div class="err">Could not load data.<br><br>Make sure your Notion databases are connected to the Finance Dashboard integration.<br><br>'+e.message+'</div>'}}
+function exp(){return D.spending.filter(function(r){return r.Type==="Expense"})}
+function inc(){return D.spending.filter(function(r){return r.Type==="Income"})}
+function sav(){return D.spending.filter(function(r){return r.Type==="Savings"})}
+function gls(){return D.goals.filter(function(r){return r.Type==="Savings Goal"})}
+function sbs(){return D.goals.filter(function(r){return r.Type==="Subscription"})}
+function tot(a){return a.reduce(function(s,r){return s+(r.Amount||0)},0)}
+function render(){if(!D)return;var a=document.getElementById("app");if(cv==="overview")a.innerHTML=ov();else if(cv==="spending")a.innerHTML=sp();else if(cv==="goals")a.innerHTML=gl();else a.innerHTML=sb();ic()}
+function ov(){var e=exp(),i=tot(inc()),s=tot(e),sv=tot(sav()),n=i-s-sv,g=gls(),su=sbs(),st=tot(su),top=e.slice().sort(function(a,b){return(b.Amount||0)-(a.Amount||0)}).slice(0,5);
+return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div><div class="kgrid fi">'+
+'<div class="k g"><div class="l">Income</div><div class="v">'+f(i)+'</div></div>'+
+'<div class="k r"><div class="l">Spent</div><div class="v">'+f(s)+'</div></div>'+
+'<div class="k p"><div class="l">Saved</div><div class="v">'+f(sv)+'</div></div>'+
+'<div class="k a"><div class="l">Net</div><div class="v">'+f(n)+'</div></div></div>'+
+'<div class="sec fi" style="animation-delay:.05s"><div class="ccard"><h3>Where money goes</h3><div class="cwrap"><canvas id="ch1"></canvas></div></div></div>'+
+'<div class="sec fi" style="animation-delay:.1s"><div class="stitle">Top spending</div>'+top.map(function(c){var p=s>0?Math.round(c.Amount/s*100):0;return'<div class="row"><div class="dot" style="background:'+cc(c.Category)+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="rname">'+c.Category+'</span><span class="ramt">'+f(c.Amount)+'</span></div><div class="rbar"><span style="width:'+p+'%;background:'+cc(c.Category)+'"></span></div></div></div>'}).join("")+'</div>'+
+'<div class="sec fi" style="animation-delay:.15s"><div class="stitle">Savings goals</div>'+g.map(function(g){var p=g["Progress %"]!=null?Math.round(g["Progress %"]*100):0;return'<div class="gcard"><div class="gtop"><span class="gname">'+g.Name+'</span><span class="gpct">'+p+'%</span></div><div class="gbar"><span style="width:'+p+'%"></span></div><div class="gamts"><span>'+f(g.Amount)+'</span><span>'+f(g.Target)+'</span></div></div>'}).join("")+'</div>'+
+'<div class="sec fi" style="animation-delay:.2s"><div class="stitle">Subscriptions \u2014 '+f(st)+'/mo</div>'+su.sort(function(a,b){return(b.Amount||0)-(a.Amount||0)}).slice(0,4).map(function(s){var cl=s.Essential==="Essential"?"ess":s.Essential==="Nice to Have"?"nice":"canc";return'<div class="srow"><div class="sleft"><span class="badge '+cl+'">'+(s.Essential==="Consider Cancelling"?"Cancel":s.Essential||"")+'</span><span class="sname">'+s.Name+'</span></div><span class="samt">'+f(s.Amount)+'/mo</span></div>'}).join("")+'</div>'}
+function sp(){var e=exp(),sorted=e.slice().sort(function(a,b){return(b.Amount||0)-(a.Amount||0)}),s=tot(e),b=e.reduce(function(t,r){return t+(r.Budget||0)},0);
+return'<div class="head fi"><h1>Spending</h1></div><div class="kgrid fi"><div class="k r"><div class="l">Total spent</div><div class="v">'+f(s)+'</div></div><div class="k a"><div class="l">Budget</div><div class="v">'+f(b)+'</div></div></div>'+
+'<div class="sec fi" style="animation-delay:.05s"><div class="ccard"><h3>By category</h3><div class="cwrap"><canvas id="ch2"></canvas></div></div></div>'+
+'<div class="sec fi" style="animation-delay:.1s"><div class="ccard"><h3>Budget vs actual</h3><div class="cwrap"><canvas id="ch3"></canvas></div></div></div>'+
+'<div class="sec fi" style="animation-delay:.15s"><div class="stitle">All categories</div>'+sorted.map(function(c){var ov=c.Budget&&c.Amount>c.Budget;return'<div class="row"><div class="dot" style="background:'+cc(c.Category)+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between;align-items:center"><span class="rname">'+c.Category+'</span><span class="ramt" style="color:'+(ov?"var(--red)":"var(--text)")+'">'+f(c.Amount)+(c.Budget?' / '+f(c.Budget):'')+'</span></div><div style="font-size:10px;color:var(--dim);margin-top:2px">'+((c.Essential||"")+(c.Notes?" · "+c.Notes.substring(0,35):""))+'</div></div></div>'}).join("")+'</div>'}
+function gl(){var g=gls(),sv=tot(sav()),i=tot(inc()),r=i>0?Math.round(sv/i*100):0;
+return'<div class="head fi"><h1>Savings + Goals</h1></div><div class="kgrid fi"><div class="k p"><div class="l">Total saved</div><div class="v">'+f(sv)+'</div></div><div class="k g"><div class="l">Savings rate</div><div class="v">'+r+'%</div></div></div>'+
+'<div class="sec fi" style="animation-delay:.05s"><div class="stitle">Goals</div>'+g.map(function(g){var p=g["Progress %"]!=null?Math.round(g["Progress %"]*100):0;return'<div class="gcard"><div class="gtop"><span class="gname">'+g.Name+'</span><span class="gpct">'+p+'%</span></div><div class="gbar"><span style="width:'+p+'%"></span></div><div class="gamts"><span>'+f(g.Amount)+' saved</span><span>Target: '+f(g.Target)+'</span></div><div style="font-size:11px;color:var(--muted);margin-top:5px">'+(g.Notes||"")+'</div></div>'}).join("")+'</div>'+
+'<div class="sec fi" style="animation-delay:.1s"><div class="ccard"><h3>Saved vs spent</h3><div class="cwrap"><canvas id="ch4"></canvas></div></div></div>'}
+function sb(){var su=sbs(),t=tot(su),es=su.filter(function(s){return s.Essential==="Essential"}),ni=su.filter(function(s){return s.Essential==="Nice to Have"}),ca=su.filter(function(s){return s.Essential==="Consider Cancelling"}),ps=tot(ca);
+return'<div class="head fi"><h1>Subscriptions</h1></div><div class="kgrid fi"><div class="k r"><div class="l">Monthly total</div><div class="v">'+f(t)+'</div></div><div class="k g"><div class="l">Can save</div><div class="v">'+f(ps)+'</div><div class="sub" style="color:var(--green)">by cancelling</div></div></div>'+
+'<div class="sec fi" style="animation-delay:.05s"><div class="ccard"><h3>Split by service</h3><div class="cwrap"><canvas id="ch5"></canvas></div></div></div>'+
+[{t:"Essential",items:es,c:"ess"},{t:"Nice to have",items:ni,c:"nice"},{t:"Consider cancelling",items:ca,c:"canc"}].filter(function(g){return g.items.length}).map(function(g,i){return'<div class="sec fi" style="animation-delay:'+(.1+i*.05)+'s"><div class="stitle">'+g.t+'</div>'+g.items.map(function(s){return'<div class="srow"><div class="sleft"><span class="sname">'+s.Name+'</span></div><span class="samt">'+f(s.Amount)+'/mo</span></div>'}).join("")+'</div>'}).join("")}
+function ic(){Chart.defaults.color="#94a3b8";Chart.defaults.font.family="-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif";Chart.defaults.font.size=11;
+var e1=document.getElementById("ch1");if(e1){var ex=exp().filter(function(r){return r.Amount>0}).sort(function(a,b){return b.Amount-a.Amount});charts.c1=new Chart(e1,{type:"doughnut",data:{labels:ex.map(function(r){return r.Category}),datasets:[{data:ex.map(function(r){return r.Amount}),backgroundColor:ex.map(function(r){return cc(r.Category)}),borderWidth:0,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:10,usePointStyle:true,pointStyle:"rectRounded",font:{size:10}}}},animation:{animateRotate:true,duration:1000}}})}
+var e2=document.getElementById("ch2");if(e2){var ex2=exp().filter(function(r){return r.Amount>0}).sort(function(a,b){return b.Amount-a.Amount});charts.c2=new Chart(e2,{type:"bar",data:{labels:ex2.map(function(r){return r.Category}),datasets:[{data:ex2.map(function(r){return r.Amount}),backgroundColor:ex2.map(function(r){return cc(r.Category)}),borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(45,58,82,.4)"},ticks:{callback:function(v){return"£"+v}}},y:{grid:{display:false},ticks:{font:{size:10}}}},animation:{duration:700}}})}
+var e3=document.getElementById("ch3");if(e3){var ex3=exp().filter(function(r){return r.Budget>0}).sort(function(a,b){return b.Amount-a.Amount});charts.c3=new Chart(e3,{type:"bar",data:{labels:ex3.map(function(r){return r.Category}),datasets:[{label:"Actual",data:ex3.map(function(r){return r.Amount}),backgroundColor:"rgba(239,68,68,.65)",borderRadius:5,borderSkipped:false},{label:"Budget",data:ex3.map(function(r){return r.Budget}),backgroundColor:"rgba(34,197,94,.35)",borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{position:"top",labels:{usePointStyle:true,pointStyle:"rectRounded",padding:14,font:{size:10}}}},scales:{x:{grid:{color:"rgba(45,58,82,.4)"},ticks:{callback:function(v){return"£"+v}}},y:{grid:{display:false},ticks:{font:{size:10}}}},animation:{duration:700}}})}
+var e4=document.getElementById("ch4");if(e4){var sv=tot(sav()),sp=tot(exp());charts.c4=new Chart(e4,{type:"doughnut",data:{labels:["Saved","Spent"],datasets:[{data:[sv,sp],backgroundColor:["#a855f7","rgba(239,68,68,.55)"],borderWidth:0,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:14,usePointStyle:true,pointStyle:"rectRounded"}}},animation:{animateRotate:true,duration:1000}}})}
+var e5=document.getElementById("ch5");if(e5){var su=sbs().filter(function(s){return s.Amount>0}).sort(function(a,b){return b.Amount-a.Amount});var sc=su.map(function(s){return s.Essential==="Essential"?"#22c55e":s.Essential==="Nice to Have"?"#f59e0b":"#ef4444"});charts.c5=new Chart(e5,{type:"doughnut",data:{labels:su.map(function(s){return s.Name}),datasets:[{data:su.map(function(s){return s.Amount}),backgroundColor:sc,borderWidth:0,hoverOffset:6}]},options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:10,usePointStyle:true,pointStyle:"rectRounded",font:{size:10}}}},animation:{animateRotate:true,duration:1000}}})}}
+load();
+</script>
+</body>
+</html>
