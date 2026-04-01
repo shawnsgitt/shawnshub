@@ -138,6 +138,34 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 
 @media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}.cwrap{height:240px}}
 
+.flow-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:8px}
+.flow-bar>div{transition:width .8s ease}
+.flow-legend{display:flex;gap:12px;flex-wrap:wrap}
+.flow-legend span{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.ldot{width:8px;height:8px;border-radius:2px;display:inline-block}
+.top-cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.top-cat{background:var(--card);border-radius:14px;padding:14px;border:1px solid var(--border);text-align:center}
+.top-cat .rank{font-size:12px;font-weight:800;color:var(--purple);margin-bottom:4px}
+.top-cat .cat-name{font-size:12px;font-weight:600;margin:4px 0}
+.top-cat .cat-amt{font-size:18px;font-weight:700}
+.acct-sel{margin-bottom:16px;display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.acct-pill{padding:7px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;background:var(--s1);color:var(--dim);border:1px solid var(--border);transition:all .15s}
+.acct-pill.on{background:var(--pbg);color:var(--purple);border-color:rgba(168,85,247,.3)}
+.txn-list-item{display:flex;align-items:center;gap:10px;background:var(--s1);border-radius:12px;padding:12px 14px;margin-bottom:6px;border:1px solid transparent;transition:border-color .15s}
+.txn-list-item:active{border-color:var(--border)}
+.txn-list-item .txn-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
+.txn-list-item .txn-details{flex:1;min-width:0}
+.txn-list-item .txn-desc-line{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txn-list-item .txn-meta-line{font-size:10px;color:var(--dim);margin-top:3px;display:flex;align-items:center;gap:6px}
+.txn-list-item .txn-amount{font-size:14px;font-weight:700;flex-shrink:0;text-align:right}
+.txn-list-item .txn-amount .txn-bal{font-size:10px;color:var(--dim);font-weight:400;margin-top:2px}
+.txn-filter-bar{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:4px}
+.txn-filter{padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;background:var(--s1);color:var(--dim);border:1px solid var(--border);transition:all .15s}
+.txn-filter.on{background:var(--pbg);color:var(--purple);border-color:rgba(168,85,247,.3)}
+.txn-search{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px;margin-bottom:12px;outline:none}
+.txn-search:focus{border-color:var(--purple)}
+.txn-search::placeholder{color:var(--dim)}
+
 .snap-hero{text-align:center;padding:24px 0 20px}
 .snap-hero .nw-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
 .snap-hero .nw-val{font-size:40px;font-weight:800;letter-spacing:-1px}
@@ -194,9 +222,42 @@ function toast(msg,isErr){
 
 function hasData(){return D&&D.transactions&&D.transactions.length>0}
 
-function expenses(){return D?D.transactions.filter(function(t){return t.type==="Expense"}):[]}
-function income(){return D?D.transactions.filter(function(t){return t.type==="Income"}):[]}
-function savings(){return D?D.transactions.filter(function(t){return t.type==="Savings"}):[]}
+function accounts(){
+  if(!D||!D.accounts)return[];
+  return Object.keys(D.accounts);
+}
+
+function filtered(){
+  if(!D||!D.transactions)return[];
+  if(selAcct==="all")return D.transactions;
+  return D.accounts[selAcct]||[];
+}
+
+function acctSelector(){
+  if(!hasData())return"";
+  var accts=accounts();
+  if(accts.length<=1)return"";
+  var html='<div class="acct-sel fi">';
+  html+='<div class="acct-pill'+(selAcct==="all"?" on":"")+'" data-acct="all">All Accounts</div>';
+  accts.forEach(function(a){
+    html+='<div class="acct-pill'+(selAcct===a?" on":"")+'" data-acct="'+escHtml(a)+'">'+escHtml(a)+'</div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function bindAcctSelector(){
+  document.querySelectorAll(".acct-pill").forEach(function(pill){
+    pill.addEventListener("click",function(){
+      selAcct=pill.dataset.acct;
+      destroyCharts();render();
+    });
+  });
+}
+
+function expenses(){return filtered().filter(function(t){return t.type==="Expense"})}
+function income(){return filtered().filter(function(t){return t.type==="Income"})}
+function savings(){return filtered().filter(function(t){return t.type==="Savings"})}
 function uncategorized(){return D?D.transactions.filter(function(t){return t.category==="Uncategorized"&&t.type!=="Non-Transactional"}):[]}
 function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absAmount||0)},0)}
 
@@ -205,12 +266,14 @@ function render(){
   destroyCharts();
   if(cv==="home")a.innerHTML=homeView();
   else if(cv==="upload")a.innerHTML=uploadView();
-  else if(cv==="overview")a.innerHTML=overviewView();
-  else if(cv==="spending")a.innerHTML=spendingView();
+  else if(cv==="overview")a.innerHTML=dashboardView();
+  else if(cv==="spending")a.innerHTML=breakdownView();
   else if(cv==="transactions")a.innerHTML=txnView();
   initCharts();
   bindUpload();
   bindUncatClicks();
+  bindAcctSelector();
+  bindTxnEvents();
 }
 
 // ───────── HOME / FINANCIAL SNAPSHOT ─────────
@@ -451,32 +514,61 @@ function smartSuggest(desc,txns){
   if(/\b(transfer between|inter account|interaccount|internal transfer|own account|between accounts|acc transfer|account transfer|move money|move funds|sweep|self transfer|same name transfer)\b/.test(lower)) return "Cash Transfer";
   // Cash in / deposits
   if(/\b(cash deposit|cash in|cash payment in|counter deposit|counter credit|branch deposit|cash at branch|cash lodgement|lodgement)\b/.test(lower)) return "Cash In";
-  // Payment/transfer patterns
-  if(/\b(rent|landlord|property|estate agent|letting)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(electric|gas|water|council|rates|levy|municipal)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(insurance|insure|cover|policy)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(vodafone|mtn|vodacom|cell c|ee|o2|giffgaff|three|telkom|airtel)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(gym|fitness|sport|active|exercise)\b/.test(lower)) return "Health & Fitness";
-  if(/\b(pharmacy|chemist|medical|doctor|dr |clinic|hospital|dental|optom)\b/.test(lower)) return "Health & Fitness";
-  if(/\b(uber|bolt|lyft|taxi|cab|ride)\b/.test(lower)) return "Transport";
-  if(/\b(fuel|petrol|diesel|garage|shell|bp|caltex|engen|sasol|esso|total)\b/.test(lower)) return "Transport";
-  if(/\b(parking|park|ncp)\b/.test(lower)) return "Transport";
-  if(/\b(restaurant|cafe|coffee|food|eat|dine|grill|kitchen|bistro|bar)\b/.test(lower)) return "Eating Out";
-  if(/\b(takeaway|take away|delivery|order)\b/.test(lower)) return "Eating Out";
-  if(/\b(shop|store|mart|retail|buy|purchase|outlet|boutique)\b/.test(lower)) return "Shopping";
-  if(/\b(amazon|ebay|online|click|web)\b/.test(lower)) return "Shopping";
-  if(/\b(salary|wage|pay\b|payroll|income|commission|bonus)\b/.test(lower)) return "Income";
-  if(/\b(refund|reversal|cashback)\b/.test(lower)) return "Income";
-  if(/\b(atm|withdraw|cash withdrawal)\b/.test(lower)) return "Cash Withdrawal";
-  if(/\b(fee|charge|admin|penalty|interest charge|overdraft)\b/.test(lower)) return "Bank Fees";
-  if(/\b(transfer|trfr|eft|send|remit|allowance)\b/.test(lower)) return "Family Support";
-  if(/\b(subscri|member|renewal|recurring|monthly|annual)\b/.test(lower)) return "Subscriptions";
-  if(/\b(save|saving|invest|deposit|isa |bond|vanguard|etf)\b/.test(lower)) return "Savings";
-  if(/\b(school|university|college|tuition|course|book|study|learn)\b/.test(lower)) return "Education";
-  if(/\b(salon|barber|hair|beauty|spa|nail|massage)\b/.test(lower)) return "Personal Care";
-  if(/\b(cinema|movie|theatre|concert|ticket|event|show|game|play)\b/.test(lower)) return "Entertainment";
-  if(/\b(church|charity|donat|tithe|offering|gift)\b/.test(lower)) return "Family Support";
-  if(/\b(grocery|grocer|supermarket|spar|shoprite|pick n pay|checkers)\b/.test(lower)) return "Groceries";
+  // Cash Withdrawal
+  if(/\b(atm|cash withdrawal|withdraw|cash send|cardless|cash back at)\b/.test(lower)) return "Cash Withdrawal";
+  // Income
+  if(/\b(salary|wages?|payroll|pay\s+from|income|commission|bonus|stipend|bursary|grant|payout|pension|benefit|annuity)\b/.test(lower)) return "Income";
+  if(/\b(refund|reversal|cashback|reimburse|rebate|credit note|returned|money back)\b/.test(lower)) return "Income";
+  if(/\b(sars|hmrc|tax refund|tax return|tax credit|dividend|interest earned|interest received|investment return)\b/.test(lower)) return "Income";
+  if(/\b(freelance|invoice paid?|payment received|deposit from|credit received|reward)\b/.test(lower)) return "Income";
+  // Bills & Utilities
+  if(/\b(rent|landlord|property|estate agent|letting|tenant|lease)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(electric|electricity|gas\s|water|sewage|council|rates|levy|municipal|waste|refuse)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(insurance|insure|cover|policy|premium|assurance|old mutual|sanlam|liberty|discovery|hollard|outsurance|momentum|santam|miway)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(vodafone|mtn|vodacom|cell\s?c|ee\b|o2\b|giffgaff|three\b|telkom|airtel|rain\b|afrihost|fibre|broadband|internet|wifi|dstv|multichoice)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(mortgage|bond repayment|home loan|strata|body corporate|property management|maintenance fee|service charge)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(debit order|d\/o|direct debit|recurring payment|standing order)\b/.test(lower)&&!/\b(gym|fitness|netflix|spotify|amazon|disney)\b/.test(lower)) return "Bills & Utilities";
+  // Transport
+  if(/\b(uber|bolt|lyft|taxi|cab|ride|didi)\b/.test(lower)&&!/\b(eats|eat|food|delivery)\b/.test(lower)) return "Transport";
+  if(/\b(fuel|petrol|diesel|garage|shell|bp\b|caltex|engen|sasol|esso|texaco|total\s+garage|filling station|gas station)\b/.test(lower)) return "Transport";
+  if(/\b(parking|park\s|ncp|easy park|justpark)\b/.test(lower)) return "Transport";
+  if(/\b(tfl|oyster|bus\b|train|rail|metro|tube|gautrain|rea vaya|myciti|golden arrow)\b/.test(lower)) return "Transport";
+  if(/\b(toll|e-?toll|dart charge|congestion|vehicle|mot\s+test|car\s+service|tyre|mechanic|car\s+wash)\b/.test(lower)) return "Transport";
+  // Eating Out
+  if(/\b(restaurant|cafe|coffee|bistro|diner|eatery|canteen|kitchen)\b/.test(lower)) return "Eating Out";
+  if(/\b(takeaway|take\s+away|delivery|uber\s*eats|deliveroo|just\s*eat|mr\s*delivery|door\s*dash|food\s+delivery)\b/.test(lower)) return "Eating Out";
+  if(/\b(pizza|burger|chicken|sushi|ramen|kebab|curry|noodle|grill|steakhouse|bbq|bar\b|pub\b|tavern|lounge|cocktail|brewery|beer)\b/.test(lower)) return "Eating Out";
+  // Groceries
+  if(/\b(grocery|grocer|supermarket|fresh\s+market|butcher|bakery|greengrocer|fruit|veg|organic|deli)\b/.test(lower)) return "Groceries";
+  // Shopping
+  if(/\b(shop|store|mart|retail|buy|purchase|outlet|boutique|mall|plaza)\b/.test(lower)&&!/\b(coffee|food|eat|restaurant|grocery|body\s+shop)\b/.test(lower)) return "Shopping";
+  if(/\b(clothing|fashion|shoes|apparel|accessories|jewel|watch|furniture|decor|hardware|tools|diy|garden|appliance)\b/.test(lower)) return "Shopping";
+  if(/\b(online|click|e-?commerce|order|parcel)\b/.test(lower)&&!/\b(food|eat|delivery|uber|just\s*eat)\b/.test(lower)) return "Shopping";
+  // Subscriptions
+  if(/\b(subscri|member|renewal|recurring|monthly\s+fee|annual\s+fee|premium\s+plan)\b/.test(lower)) return "Subscriptions";
+  // Health & Fitness
+  if(/\b(gym|fitness|sport|active|exercise|workout|yoga|pilates|crossfit)\b/.test(lower)) return "Health & Fitness";
+  if(/\b(pharmacy|chemist|medical|doctor|dr\s|clinic|hospital|dental|dentist|optom|physio|therapist|counsell|psychology|chiropract|pathology)\b/.test(lower)) return "Health & Fitness";
+  if(/\b(vitamin|supplement|protein|wellness|medicine|prescription|dispens)\b/.test(lower)) return "Health & Fitness";
+  // Entertainment
+  if(/\b(cinema|movie|theatre|concert|ticket|event|show|performance|gallery|museum|zoo|aquarium|theme\s+park|arcade|bowling|escape\s+room|comedy|festival)\b/.test(lower)) return "Entertainment";
+  if(/\b(gaming|steam|playstation|nintendo|xbox|epic\s+games)\b/.test(lower)) return "Entertainment";
+  // Education
+  if(/\b(school|university|college|tuition|course|academy|training|workshop|seminar|exam|certification|study|learning|textbook|stationery|education|student|bootcamp)\b/.test(lower)) return "Education";
+  if(/\b(udemy|coursera|skillshare|book|kindle|library)\b/.test(lower)) return "Education";
+  // Personal Care
+  if(/\b(salon|barber|hairdresser|hair|beauty|nail|spa|wax|facial|massage|grooming|cosmetic|makeup|skincare|perfume)\b/.test(lower)) return "Personal Care";
+  // Savings
+  if(/\b(sav(e|ing)|invest|isa\b|premium\s+bond|unit\s+trust|money\s+market|fixed\s+deposit|etf|index\s+fund|retirement|provident)\b/.test(lower)) return "Savings";
+  // Family Support
+  if(/\b(church|charity|donat|tithe|offering|zakat|ngo|foundation|fundrais|sponsor)\b/.test(lower)) return "Family Support";
+  if(/\b(transfer|trfr|eft|send|remit|allowance)\b/.test(lower)&&/\b(to\s|family|child|parent|mother|father|wife|husband|gift)\b/.test(lower)) return "Family Support";
+  // Bank Fees
+  if(/\b(fee|charge|admin|penalty|interest\s+charge|overdraft|insufficient|nsf|rejected|unpaid|bounce|ledger|service\s+fee|transaction\s+fee|card\s+fee|account\s+fee|monthly\s+fee|sms\s+fee)\b/.test(lower)) return "Bank Fees";
+  // Fallback heuristics
+  if(/\b(pos|point\s+of\s+sale|card\s+purchase)\b/.test(lower)) return "Shopping";
+  if(/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Family Support";
   // Check amount patterns — very small recurring amounts might be subscriptions
   if(txns&&txns.length>=2){
     var amounts=txns.map(function(t){return t.absAmount});
@@ -786,6 +878,180 @@ function recalcAnalysis(){
 
 function bindUncatClicks(){}
 
+// ───────── TRANSACTIONS VIEW ─────────
+var txnState={filter:"all",search:"",page:0,pageSize:50};
+
+function txnView(){
+  if(!hasData())return emptyState("Transactions");
+  var all=filtered();
+  var search=txnState.search.toLowerCase();
+  var filterType=txnState.filter;
+
+  // Apply filters
+  var txns=all.filter(function(t){
+    if(filterType==="expense"&&t.type!=="Expense")return false;
+    if(filterType==="income"&&t.type!=="Income")return false;
+    if(filterType==="savings"&&t.type!=="Savings")return false;
+    if(filterType==="uncategorized"&&(t.category!=="Uncategorized"||t.type==="Non-Transactional"))return false;
+    if(search&&t.description.toLowerCase().indexOf(search)===-1&&t.category.toLowerCase().indexOf(search)===-1&&t.date.indexOf(search)===-1)return false;
+    return true;
+  });
+
+  // Sort by date descending
+  txns=txns.slice().sort(function(a,b){
+    var pa=a.date.split("/"),pb=b.date.split("/");
+    var da=new Date(pa[2],pa[1]-1,pa[0]),db=new Date(pb[2],pb[1]-1,pb[0]);
+    return db-da;
+  });
+
+  var total=txns.length;
+  var start=txnState.page*txnState.pageSize;
+  var paged=txns.slice(start,start+txnState.pageSize);
+  var totalPages=Math.ceil(total/txnState.pageSize);
+
+  var uncatCount=uncategorized().length;
+
+  var html='<div class="head fi"><h1>Transactions</h1><div style="font-size:12px;color:var(--dim)">'+total+' of '+all.length+'</div></div>';
+
+  html+=acctSelector();
+
+  // Search bar
+  html+='<input class="txn-search fi" type="text" placeholder="Search by description, category, or date..." value="'+escHtml(txnState.search)+'" id="txnSearch">';
+
+  // Filter tabs
+  html+='<div class="txn-filter-bar fi">';
+  var filters=[
+    {key:"all",label:"All ("+all.length+")"},
+    {key:"expense",label:"Expenses ("+all.filter(function(t){return t.type==="Expense"}).length+")"},
+    {key:"income",label:"Income ("+all.filter(function(t){return t.type==="Income"}).length+")"},
+    {key:"savings",label:"Savings ("+all.filter(function(t){return t.type==="Savings"}).length+")"}
+  ];
+  if(uncatCount>0)filters.push({key:"uncategorized",label:"Uncategorized ("+uncatCount+")"});
+  filters.forEach(function(ft){
+    html+='<div class="txn-filter'+(txnState.filter===ft.key?" on":"")+'" data-tf="'+ft.key+'">'+ft.label+'</div>';
+  });
+  html+='</div>';
+
+  // Uncategorized banner
+  if(uncatCount>0&&txnState.filter!=="uncategorized"){
+    html+='<div class="uncat-banner fi" onclick="openUncatWizard()" style="margin-bottom:14px"><h3>'+uncatCount+' uncategorized</h3><p>Tap to batch categorize for better insights</p></div>';
+  }
+
+  // Transaction list
+  if(paged.length===0){
+    html+='<div style="text-align:center;padding:40px 0;color:var(--dim)">No transactions match your filters</div>';
+  }else{
+    var typeIcons={Expense:"&#8595;",Income:"&#8593;",Savings:"&#9733;","Non-Transactional":"&#8644;"};
+    var typeColors={Expense:"var(--rbg)",Income:"var(--gbg)",Savings:"var(--pbg)","Non-Transactional":"rgba(100,116,139,.1)"};
+    var typeTextColors={Expense:"var(--red)",Income:"var(--green)",Savings:"var(--purple)","Non-Transactional":"var(--dim)"};
+    paged.forEach(function(t,idx){
+      var amtColor=t.type==="Income"||t.type==="Cash In"?"var(--green)":t.type==="Savings"?"var(--purple)":t.type==="Non-Transactional"?"var(--dim)":"var(--red)";
+      var amtPrefix=t.type==="Income"||t.type==="Cash In"?"+":t.type==="Non-Transactional"?"":"-";
+      html+='<div class="txn-list-item fi" style="animation-delay:'+(Math.min(idx,20)*0.02)+'s" data-txn-id="'+t.id+'">'+
+        '<div class="txn-icon" style="background:'+typeColors[t.type]+';color:'+typeTextColors[t.type]+'">'+typeIcons[t.type]+'</div>'+
+        '<div class="txn-details">'+
+          '<div class="txn-desc-line">'+escHtml(t.description)+'</div>'+
+          '<div class="txn-meta-line">'+
+            '<span style="padding:2px 7px;border-radius:5px;background:'+(t.category==="Uncategorized"?"var(--abg)":"var(--s2)")+';color:'+(t.category==="Uncategorized"?"var(--amber)":"var(--dim)")+';font-weight:'+(t.category==="Uncategorized"?"600":"400")+'">'+t.category+'</span>'+
+            '<span>'+t.date+'</span>'+
+          '</div>'+
+        '</div>'+
+        '<div class="txn-amount" style="color:'+amtColor+'">'+
+          '<div>'+amtPrefix+f(t.absAmount)+'</div>'+
+          (t.balance!=null?'<div class="txn-bal">Bal: '+f(t.balance)+'</div>':'')+
+        '</div>'+
+      '</div>';
+    });
+  }
+
+  // Pagination
+  if(totalPages>1){
+    html+='<div style="display:flex;justify-content:center;align-items:center;gap:12px;padding:16px 0">';
+    html+='<div class="txn-filter'+(txnState.page>0?'':'" style="opacity:.3;pointer-events:none')+'" id="txnPrev">&#8592; Prev</div>';
+    html+='<span style="font-size:12px;color:var(--muted)">Page '+(txnState.page+1)+' of '+totalPages+'</span>';
+    html+='<div class="txn-filter'+(txnState.page<totalPages-1?'':'" style="opacity:.3;pointer-events:none')+'" id="txnNext">Next &#8594;</div>';
+    html+='</div>';
+  }
+
+  return html;
+}
+
+function bindTxnEvents(){
+  // Search
+  var searchInput=document.getElementById("txnSearch");
+  if(searchInput){
+    var timer;
+    searchInput.addEventListener("input",function(){
+      clearTimeout(timer);
+      timer=setTimeout(function(){
+        txnState.search=searchInput.value;
+        txnState.page=0;
+        destroyCharts();render();
+        var el=document.getElementById("txnSearch");
+        if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}
+      },250);
+    });
+  }
+
+  // Filters
+  document.querySelectorAll(".txn-filter[data-tf]").forEach(function(ft){
+    ft.addEventListener("click",function(){
+      txnState.filter=ft.dataset.tf;
+      txnState.page=0;
+      destroyCharts();render();
+    });
+  });
+
+  // Pagination
+  var prevBtn=document.getElementById("txnPrev");
+  if(prevBtn)prevBtn.addEventListener("click",function(){
+    if(txnState.page>0){txnState.page--;destroyCharts();render()}
+  });
+  var nextBtn=document.getElementById("txnNext");
+  if(nextBtn)nextBtn.addEventListener("click",function(){
+    txnState.page++;destroyCharts();render();
+  });
+
+  // Click on transaction to change category
+  document.querySelectorAll(".txn-list-item[data-txn-id]").forEach(function(el){
+    el.addEventListener("click",function(){
+      var txnId=el.dataset.txnId;
+      var txn=D.transactions.find(function(t){return t.id===txnId});
+      if(txn)openCategoryModal(txn);
+    });
+  });
+}
+
+function openCategoryModal(txn){
+  var existing=document.querySelector(".modal-bg");
+  if(existing)existing.remove();
+  var bg=document.createElement("div");
+  bg.className="modal-bg";
+  bg.innerHTML='<div class="modal">'+
+    '<h3>Change Category</h3>'+
+    '<div class="modal-sub">'+escHtml(txn.description)+'<br><strong style="color:var(--red)">-'+f(txn.absAmount)+'</strong> &middot; '+txn.date+'<br>Current: <span style="color:var(--purple)">'+txn.category+'</span></div>'+
+    CATS.filter(function(c){return c!=="Uncategorized"}).map(function(c){
+      return '<div class="cat-opt" data-cat="'+c+'"><div class="dot" style="background:'+cc(c)+'"></div><span>'+c+'</span>'+(txn.category===c?' <span style="margin-left:auto;font-size:11px;color:var(--purple)">&#10003; current</span>':'')+'</div>';
+    }).join("")+
+    '<button class="modal-close" id="modalClose">Cancel</button>'+
+  '</div>';
+  document.body.appendChild(bg);
+  bg.querySelector("#modalClose").addEventListener("click",function(){bg.remove()});
+  bg.addEventListener("click",function(e){if(e.target===bg)bg.remove()});
+  bg.querySelectorAll(".cat-opt").forEach(function(opt){
+    opt.addEventListener("click",function(){
+      var cat=opt.dataset.cat;
+      txn.category=cat;
+      txn.type=typeForCategory(cat);
+      learnCategories([{description:txn.description,category:cat}]);
+      bg.remove();
+      recalcAnalysis();
+      render();
+      toast("Categorized as "+cat);
+    });
+  });
+}
+
 // ───────── DASHBOARD VIEW ─────────
 function dashboardView(){
   if(!hasData())return emptyState("Dashboard");
@@ -1043,6 +1309,7 @@ function healthLabel(i,e,s){
 
 // ───────── HELPERS ─────────
 function emptyState(section){
+  section=section||"Finance Hub";
   return'<div class="head fi"><h1>'+section+'</h1></div>'+
   '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No data yet</h2><p>Upload a bank statement in the Upload tab to see your financial analysis here. Your data is never stored — it\'s analyzed in real-time.</p></div>';
 }
