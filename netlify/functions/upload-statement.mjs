@@ -1,4 +1,5 @@
 import { getStore } from "@netlify/blobs";
+import pdf from "pdf-parse/lib/pdf-parse.js";
 
 // Category keywords for auto-categorization
 const CATEGORY_RULES = [
@@ -174,6 +175,121 @@ function parseAmount(str) {
   return parseFloat(cleaned) || 0;
 }
 
+// Parse PDF bank statement into transactions
+async function parsePDF(buffer) {
+  const data = await pdf(buffer);
+  const text = data.text;
+  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+
+  const accountType = detectAccountType(lines);
+
+  // Common date patterns: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, DD Mon YYYY, etc.
+  const datePatterns = [
+    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
+    /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
+    /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/i,
+  ];
+
+  // Amount pattern: optional currency symbol, digits with optional commas, decimal, digits
+  const amountPattern = /[£$€]?\s*-?\d{1,3}(?:,\d{3})*(?:\.\d{2})\b/g;
+
+  const transactions = [];
+  let lineIndex = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Try to find a date at the start of the line
+    let dateMatch = null;
+    for (const dp of datePatterns) {
+      const m = line.match(dp);
+      if (m && line.indexOf(m[1]) < 20) {
+        dateMatch = m[1];
+        break;
+      }
+    }
+    if (!dateMatch) continue;
+
+    // Extract amounts from the line (and possibly next line for multi-line entries)
+    let fullText = line;
+    // Some PDF statements wrap description to next line
+    if (i + 1 < lines.length && !lines[i + 1].match(datePatterns[0]) && !lines[i + 1].match(datePatterns[1])) {
+      const nextLine = lines[i + 1];
+      // Only join if next line doesn't start with a date
+      let hasDate = false;
+      for (const dp of datePatterns) {
+        if (nextLine.match(dp) && nextLine.indexOf(nextLine.match(dp)?.[1]) < 20) {
+          hasDate = true;
+          break;
+        }
+      }
+      if (!hasDate) {
+        fullText += " " + nextLine;
+      }
+    }
+
+    const amounts = fullText.match(amountPattern);
+    if (!amounts || amounts.length === 0) continue;
+
+    // Extract description: text between date and first amount
+    const dateEnd = fullText.indexOf(dateMatch) + dateMatch.length;
+    const firstAmtIdx = fullText.indexOf(amounts[0]);
+    let description = fullText.substring(dateEnd, firstAmtIdx).trim();
+    // Clean up description
+    description = description.replace(/^[\s,\-|]+/, "").replace(/[\s,\-|]+$/, "").trim();
+    if (!description || description.length < 2) {
+      // Try to use text after date up to numbers
+      description = fullText.substring(dateEnd).replace(/[£$€\d,.\-\s]+$/, "").trim();
+    }
+    if (!description || description.length < 2) continue;
+
+    // Parse amount - use last amount as balance if multiple, first as transaction amount
+    let amount = parseAmount(amounts[0]);
+    let balance = null;
+    if (amounts.length >= 2) {
+      // If there are debit and credit columns, or amount and balance
+      if (amounts.length >= 3) {
+        // Likely: debit, credit, balance
+        const debit = parseAmount(amounts[0]);
+        const credit = parseAmount(amounts[1]);
+        balance = parseAmount(amounts[amounts.length - 1]);
+        amount = credit > 0 ? credit : -Math.abs(debit);
+      } else {
+        amount = parseAmount(amounts[0]);
+        balance = parseAmount(amounts[amounts.length - 1]);
+      }
+    }
+
+    // If amount is 0, skip
+    if (amount === 0) continue;
+
+    const category = categorize(description);
+    const type =
+      category === "Income"
+        ? "Income"
+        : category === "Savings"
+          ? "Savings"
+          : amount > 0
+            ? "Income"
+            : "Expense";
+
+    lineIndex++;
+    transactions.push({
+      id: `txn_${Date.now()}_${lineIndex}`,
+      date: dateMatch,
+      description,
+      amount,
+      absAmount: Math.abs(amount),
+      balance,
+      category,
+      type,
+      manualCategory: false,
+    });
+  }
+
+  return { transactions, accountType };
+}
+
 export default async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "POST required" }), {
@@ -194,8 +310,17 @@ export default async (req) => {
       });
     }
 
-    const text = await file.text();
-    const { transactions, accountType } = parseCSV(text);
+    const fileName = (file.name || "").toLowerCase();
+    const isPDF = fileName.endsWith(".pdf") || file.type === "application/pdf";
+
+    let transactions, accountType;
+    if (isPDF) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      ({ transactions, accountType } = await parsePDF(buffer));
+    } else {
+      const text = await file.text();
+      ({ transactions, accountType } = parseCSV(text));
+    }
 
     if (transactions.length === 0) {
       return new Response(
