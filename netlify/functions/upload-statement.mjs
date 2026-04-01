@@ -1,4 +1,49 @@
 import * as XLSX from "xlsx";
+import { getStore } from "@netlify/blobs";
+
+// ───────── LEARNED CATEGORY MAPPINGS (Netlify Blobs) ─────────
+async function loadLearnedMappings() {
+  try {
+    const store = getStore({ name: "finance-hub", consistency: "strong" });
+    const data = await store.get("learned-categories", { type: "json" });
+    return data || { mappings: {} };
+  } catch { return { mappings: {} }; }
+}
+
+async function saveLearnedMappings(data) {
+  try {
+    const store = getStore({ name: "finance-hub", consistency: "strong" });
+    await store.setJSON("learned-categories", data);
+  } catch { /* silently fail — learning is best-effort */ }
+}
+
+// Normalize a description to a stable key for learning
+function normalizeForLearning(desc) {
+  var s = (desc || "").toLowerCase().trim();
+  // Remove reference numbers, dates, card numbers, amounts
+  s = s.replace(/\b(ref|txn|transaction|card|payment)\s*[:# -]?\s*\d+\b/gi, "");
+  s = s.replace(/\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?/g, "");
+  s = s.replace(/\b\d{6,}\b/g, "");
+  s = s.replace(/[£$€]\s*[\d,.]+/g, "");
+  s = s.replace(/\s+/g, " ").trim();
+  if (s.length < 3) return (desc || "").toLowerCase().trim();
+  return s;
+}
+
+// ───────── BALANCE CARRIED FORWARD DETECTION ─────────
+// These are not real transactions — they are opening/closing balance entries
+const BALANCE_CF_PATTERNS = [
+  "balance carried forward", "balance brought forward",
+  "balance c/f", "balance b/f", "balance c/d", "balance b/d",
+  "carried forward", "brought forward", "carried down", "brought down",
+  "opening balance", "closing balance", "ob ", "cb ",
+  "balance from previous", "previous balance", "last balance",
+];
+
+function isBalanceCarriedForward(description) {
+  const lower = (description || "").toLowerCase();
+  return BALANCE_CF_PATTERNS.some(p => lower.includes(p));
+}
 
 // Category keywords for auto-categorization — extensive list for maximum auto-match
 const CATEGORY_RULES = [
@@ -13,14 +58,26 @@ const CATEGORY_RULES = [
   { category: "Education", keywords: ["udemy", "coursera", "skillshare", "book", "waterstones", "wh smith", "tuition", "school", "university", "student", "course", "college", "academy", "training", "workshop", "seminar", "exam", "certification", "study", "learning", "lecture", "textbook", "stationery", "cna ", "exclusive books", "loot.co", "kindle", "amazon book"] },
   { category: "Personal Care", keywords: ["barber", "hairdresser", "salon", "spa", "beauty", "nail", "lush", "the body shop", "perfume", "cosmetic", "makeup", "skincare", "grooming", "massage", "facial", "wax", "sorbet", "rain salon", "reed & barton", "dermatolog", "aesthetic"] },
   { category: "Family Support", keywords: ["transfer to", "family", "gift", "charity", "donation", "send money", "remittance", "allowance", "pocket money", "church", "tithe", "offering", "zakat", "support", "maintenance"] },
+  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer"] },
   { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
   { category: "Savings", keywords: ["savings", "save", "investment", "isa", "premium bond", "vanguard", "trading 212", "freetrade", "nutmeg", "moneybox", "unit trust", "money market", "fixed deposit", "notice deposit", "capitec save", "fnb save", "easy equities", "etf", "satrix", "sygnia", "allan gray", "coronation", "stanlib"] },
-  { category: "Cash Withdrawal", keywords: ["atm", "cash withdrawal", "cashback", "cash back at", "withdraw", "cash send", "cardless"] },
+  { category: "Cash Withdrawal", keywords: ["atm", "cash withdrawal", "withdraw", "cash send", "cardless"] },
+  { category: "Cash In", keywords: ["cash deposit", "cash in", "cash payment in", "cash credit", "cash received", "counter deposit", "counter credit", "branch deposit", "cash at branch", "cash lodgement", "lodgement"] },
   { category: "Bank Fees", keywords: ["bank charge", "bank fee", "service fee", "transaction fee", "admin fee", "card fee", "account fee", "monthly fee", "annual fee", "interest charged", "overdraft", "debit order fee", "eft fee", "penalty", "late fee"] },
 ];
 
-function categorize(description) {
+// Non-transactional types — these are not expenses or income
+const NON_TRANSACTIONAL_CATEGORIES = new Set(["Balance Carried Forward", "Cash Transfer"]);
+
+function categorize(description, learnedMappings) {
+  // First check if this is a balance carried forward entry
+  if (isBalanceCarriedForward(description)) {
+    return "Balance Carried Forward";
+  }
+
   const lower = (description || "").toLowerCase();
+
+  // Check keyword rules first (highest confidence)
   for (const rule of CATEGORY_RULES) {
     for (const keyword of rule.keywords) {
       if (lower.includes(keyword)) {
@@ -28,6 +85,16 @@ function categorize(description) {
       }
     }
   }
+
+  // Check learned mappings (user-trained categories)
+  if (learnedMappings && learnedMappings.mappings) {
+    const normalized = normalizeForLearning(description);
+    const learned = learnedMappings.mappings[normalized];
+    if (learned && learned.category && learned.count >= 1) {
+      return learned.category;
+    }
+  }
+
   return "Uncategorized";
 }
 
@@ -109,7 +176,7 @@ function detectSignConvention(rawEntries) {
   ]);
 
   for (const entry of rawEntries) {
-    const cat = categorize(entry.description);
+    const cat = categorize(entry.description, null);
     if (expenseCategories.has(cat)) {
       if (entry.amount > 0) expensePositive++;
       else if (entry.amount < 0) expenseNegative++;
@@ -129,7 +196,7 @@ function detectSignConvention(rawEntries) {
   return "normal";
 }
 
-function parseExcelSheet(rows, headers) {
+function parseExcelSheet(rows, headers, learnedMappings) {
   if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
   const dateCol = findColumn(headers, ["date"]);
@@ -209,15 +276,23 @@ function parseExcelSheet(rows, headers) {
   // Second pass: build final transactions with corrected amounts
   const transactions = [];
   for (const entry of rawEntries) {
-    const category = categorize(entry.description);
-    const type =
-      category === "Income"
-        ? "Income"
-        : category === "Savings"
-          ? "Savings"
-          : entry.amount > 0
-            ? "Income"
-            : "Expense";
+    const category = categorize(entry.description, learnedMappings);
+
+    // Determine transaction type
+    let type;
+    if (NON_TRANSACTIONAL_CATEGORIES.has(category)) {
+      type = "Non-Transactional";
+    } else if (category === "Income" || category === "Cash In") {
+      type = "Income";
+    } else if (category === "Savings") {
+      type = "Savings";
+    } else if (category === "Cash Withdrawal") {
+      type = "Expense";
+    } else if (entry.amount > 0) {
+      type = "Income";
+    } else {
+      type = "Expense";
+    }
 
     transactions.push({
       id: `txn_${Date.now()}_${entry.index}`,
@@ -258,9 +333,10 @@ function verifyAndFixOrientation(transactions) {
   // If inverted signals outnumber correct ones by 2:1, flip all signs
   if (invertedCount > correctCount * 2 && invertedCount >= 3) {
     transactions.forEach(t => {
+      if (t.type === "Non-Transactional") return; // don't flip non-transactional entries
       t.amount = -t.amount;
       // Recategorize type based on new amount
-      if (t.category === "Income" || t.amount > 0) {
+      if (t.category === "Income" || t.category === "Cash In" || t.amount > 0) {
         t.type = "Income";
       } else if (t.category === "Savings") {
         t.type = "Savings";
@@ -272,10 +348,13 @@ function verifyAndFixOrientation(transactions) {
   return transactions;
 }
 
-function parseExcel(buffer) {
+async function parseExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const allTransactions = [];
   const sheetErrors = [];
+
+  // Load learned category mappings for smart auto-categorization
+  const learnedMappings = await loadLearnedMappings();
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
@@ -298,7 +377,7 @@ function parseExcel(buffer) {
     const headers = Object.keys(rows[0]).map((h) => String(h).trim());
 
     try {
-      const result = parseExcelSheet(rows, headers);
+      const result = parseExcelSheet(rows, headers, learnedMappings);
       allTransactions.push(...result.transactions);
     } catch (e) {
       sheetErrors.push(`${sheetName}: ${e.message}`);
@@ -318,14 +397,16 @@ function parseExcel(buffer) {
 }
 
 function generateAnalysis(transactions) {
-  const totalIncome = transactions.filter(t => t.type === "Income").reduce((s, t) => s + t.absAmount, 0);
-  const totalExpenses = transactions.filter(t => t.type === "Expense").reduce((s, t) => s + t.absAmount, 0);
-  const totalSavings = transactions.filter(t => t.type === "Savings").reduce((s, t) => s + t.absAmount, 0);
+  // Exclude non-transactional entries (balance carried forward, cash transfers) from totals
+  const realTransactions = transactions.filter(t => t.type !== "Non-Transactional");
+  const totalIncome = realTransactions.filter(t => t.type === "Income").reduce((s, t) => s + t.absAmount, 0);
+  const totalExpenses = realTransactions.filter(t => t.type === "Expense").reduce((s, t) => s + t.absAmount, 0);
+  const totalSavings = realTransactions.filter(t => t.type === "Savings").reduce((s, t) => s + t.absAmount, 0);
   const net = totalIncome - totalExpenses - totalSavings;
 
-  // Category breakdown for expenses only
+  // Category breakdown for expenses only (excluding non-transactional)
   const categoryBreakdown = {};
-  transactions.filter(t => t.type === "Expense").forEach(t => {
+  realTransactions.filter(t => t.type === "Expense").forEach(t => {
     if (!categoryBreakdown[t.category]) {
       categoryBreakdown[t.category] = { total: 0, count: 0, transactions: [] };
     }
@@ -436,7 +517,17 @@ function generateAnalysis(transactions) {
   }
 
   // Uncategorized warning
-  const uncatCount = transactions.filter(t => t.category === "Uncategorized").length;
+  const uncatCount = realTransactions.filter(t => t.category === "Uncategorized").length;
+
+  // Non-transactional info
+  const nonTxnCount = transactions.filter(t => t.type === "Non-Transactional").length;
+  if (nonTxnCount > 0) {
+    recommendations.push({
+      type: "info",
+      title: `${nonTxnCount} non-transactional entr${nonTxnCount !== 1 ? "ies" : "y"} detected`,
+      detail: "Balance carried forward and cash transfer entries were automatically excluded from income/expense calculations.",
+    });
+  }
   if (uncatCount > 0) {
     recommendations.push({
       type: "info",
@@ -489,7 +580,7 @@ export default async (req) => {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const transactions = parseExcel(buffer);
+    const transactions = await parseExcel(buffer);
 
     if (transactions.length === 0) {
       return new Response(

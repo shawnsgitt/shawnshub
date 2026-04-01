@@ -167,8 +167,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 </nav>
 
 <script>
-var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Income","Savings","Cash Withdrawal","Bank Fees","Uncategorized"];
-var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Bank Fees":"#dc2626","Uncategorized":"#64748b"};
+var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
+var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 
@@ -197,7 +197,7 @@ function hasData(){return D&&D.transactions&&D.transactions.length>0}
 function expenses(){return D?D.transactions.filter(function(t){return t.type==="Expense"}):[]}
 function income(){return D?D.transactions.filter(function(t){return t.type==="Income"}):[]}
 function savings(){return D?D.transactions.filter(function(t){return t.type==="Savings"}):[]}
-function uncategorized(){return D?D.transactions.filter(function(t){return t.category==="Uncategorized"}):[]}
+function uncategorized(){return D?D.transactions.filter(function(t){return t.category==="Uncategorized"&&t.type!=="Non-Transactional"}):[]}
 function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absAmount||0)},0)}
 
 function render(){
@@ -273,6 +273,7 @@ function homeView(){
   var mt=monthlyTxns();
   var mIncome=0,mSpending=0;
   mt.forEach(function(t){
+    if(t.type==="Non-Transactional") return;
     if(t.type==="Income")mIncome+=Math.abs(t.amount||t.absAmount||0);
     else if(t.type==="Expense")mSpending+=Math.abs(t.amount||t.absAmount||0);
   });
@@ -444,6 +445,12 @@ function groupUncategorized(items){
 // Smart suggestion engine: guesses likely category from description patterns
 function smartSuggest(desc,txns){
   var lower=(desc||"").toLowerCase();
+  // Balance carried forward — should not be categorized as expense/income
+  if(/\b(balance carried|balance brought|balance c\/f|balance b\/f|balance c\/d|balance b\/d|opening balance|closing balance|carried forward|brought forward)\b/.test(lower)) return "Balance Carried Forward";
+  // Cash transfers between own accounts
+  if(/\b(transfer between|inter account|interaccount|internal transfer|own account|between accounts|acc transfer|account transfer|move money|move funds|sweep|self transfer|same name transfer)\b/.test(lower)) return "Cash Transfer";
+  // Cash in / deposits
+  if(/\b(cash deposit|cash in|cash payment in|counter deposit|counter credit|branch deposit|cash at branch|cash lodgement|lodgement)\b/.test(lower)) return "Cash In";
   // Payment/transfer patterns
   if(/\b(rent|landlord|property|estate agent|letting)\b/.test(lower)) return "Bills & Utilities";
   if(/\b(electric|gas|water|council|rates|levy|municipal)\b/.test(lower)) return "Bills & Utilities";
@@ -460,7 +467,7 @@ function smartSuggest(desc,txns){
   if(/\b(amazon|ebay|online|click|web)\b/.test(lower)) return "Shopping";
   if(/\b(salary|wage|pay\b|payroll|income|commission|bonus)\b/.test(lower)) return "Income";
   if(/\b(refund|reversal|cashback)\b/.test(lower)) return "Income";
-  if(/\b(atm|withdraw|cash)\b/.test(lower)) return "Cash Withdrawal";
+  if(/\b(atm|withdraw|cash withdrawal)\b/.test(lower)) return "Cash Withdrawal";
   if(/\b(fee|charge|admin|penalty|interest charge|overdraft)\b/.test(lower)) return "Bank Fees";
   if(/\b(transfer|trfr|eft|send|remit|allowance)\b/.test(lower)) return "Family Support";
   if(/\b(subscri|member|renewal|recurring|monthly|annual)\b/.test(lower)) return "Subscriptions";
@@ -469,6 +476,7 @@ function smartSuggest(desc,txns){
   if(/\b(salon|barber|hair|beauty|spa|nail|massage)\b/.test(lower)) return "Personal Care";
   if(/\b(cinema|movie|theatre|concert|ticket|event|show|game|play)\b/.test(lower)) return "Entertainment";
   if(/\b(church|charity|donat|tithe|offering|gift)\b/.test(lower)) return "Family Support";
+  if(/\b(grocery|grocer|supermarket|spar|shoprite|pick n pay|checkers)\b/.test(lower)) return "Groceries";
   // Check amount patterns — very small recurring amounts might be subscriptions
   if(txns&&txns.length>=2){
     var amounts=txns.map(function(t){return t.absAmount});
@@ -476,6 +484,24 @@ function smartSuggest(desc,txns){
     if(allSame&&amounts[0]<100) return "Subscriptions";
   }
   return null;
+}
+
+// Helper: determine transaction type from category
+function typeForCategory(cat){
+  if(cat==="Balance Carried Forward"||cat==="Cash Transfer") return "Non-Transactional";
+  if(cat==="Income"||cat==="Cash In") return "Income";
+  if(cat==="Savings") return "Savings";
+  return "Expense";
+}
+
+// ───────── LEARNING API HELPER ─────────
+function learnCategories(mappings){
+  if(!mappings||!mappings.length)return;
+  fetch("/api/learn-categories",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({action:"learn",mappings:mappings})
+  }).catch(function(){});
 }
 
 var batchState={groups:[],selected:{},expanded:{},search:"",view:"all"};
@@ -630,17 +656,18 @@ function bindBatchEvents(bg){
   if(acceptAllBtn){
     acceptAllBtn.addEventListener("click",function(){
       var applied=0;
+      var toLearn=[];
       batchState.groups.forEach(function(g){
         if(g.suggestion){
           g.transactions.forEach(function(t){
             t.category=g.suggestion;
-            if(g.suggestion==="Income"){t.type="Income"}
-            else if(g.suggestion==="Savings"){t.type="Savings"}
-            else{t.type="Expense"}
+            t.type=typeForCategory(g.suggestion);
+            toLearn.push({description:t.description,category:g.suggestion});
           });
           applied+=g.transactions.length;
         }
       });
+      learnCategories(toLearn);
       toast(applied+" transactions auto-categorized!");
       showBatchModal();
     });
@@ -679,12 +706,13 @@ function bindBatchEvents(bg){
         var cat=quickAcceptBtn.dataset.cat;
         var group=batchState.groups.find(function(g){return g.key===key});
         if(group){
+          var toLearn=[];
           group.transactions.forEach(function(t){
             t.category=cat;
-            if(cat==="Income"){t.type="Income"}
-            else if(cat==="Savings"){t.type="Savings"}
-            else{t.type="Expense"}
+            t.type=typeForCategory(cat);
+            toLearn.push({description:t.description,category:cat});
           });
+          learnCategories(toLearn);
           toast(group.transactions.length+" categorized as "+cat);
           showBatchModal();
         }
@@ -698,17 +726,18 @@ function bindBatchEvents(bg){
     var cat=catSelect.value;
     if(!cat){toast("Please select a category first",true);return}
     var applied=0;
+    var toLearn=[];
     batchState.groups.forEach(function(g){
       if(batchState.selected[g.key]){
         g.transactions.forEach(function(t){
           t.category=cat;
-          if(cat==="Income"){t.type="Income"}
-          else if(cat==="Savings"){t.type="Savings"}
-          else{t.type="Expense"}
+          t.type=typeForCategory(cat);
+          toLearn.push({description:t.description,category:cat});
         });
         applied+=g.transactions.length;
       }
     });
+    learnCategories(toLearn);
     // Clear selection for applied groups
     Object.keys(batchState.selected).forEach(function(k){
       if(batchState.selected[k])delete batchState.selected[k];
@@ -733,6 +762,7 @@ function recalcAnalysis(){
   var txns=D.transactions;
   var totalIncome=0,totalExpenses=0,totalSavings=0;
   txns.forEach(function(t){
+    if(t.type==="Non-Transactional") return; // exclude balance c/f and cash transfers
     if(t.type==="Income")totalIncome+=t.absAmount;
     else if(t.type==="Savings")totalSavings+=t.absAmount;
     else totalExpenses+=t.absAmount;
