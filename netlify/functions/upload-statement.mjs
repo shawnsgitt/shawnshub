@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import pdf from "pdf-parse/lib/pdf-parse.js";
+import { PDFParse } from "pdf-parse";
 
 // Category keywords for auto-categorization
 const CATEGORY_RULES = [
@@ -177,8 +177,9 @@ function parseAmount(str) {
 
 // Parse PDF bank statement into transactions
 async function parsePDF(buffer) {
-  const data = await pdf(buffer);
-  const text = data.text;
+  const parser = new PDFParse({ data: buffer });
+  const result = await parser.getText();
+  const text = result.text;
   const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
 
   const accountType = detectAccountType(lines);
@@ -287,6 +288,7 @@ async function parsePDF(buffer) {
     });
   }
 
+  await parser.destroy();
   return { transactions, accountType };
 }
 
