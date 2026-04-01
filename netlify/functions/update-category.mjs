@@ -37,11 +37,9 @@ export default async (req) => {
       });
     }
 
-    // Update the category
     txn.category = newCategory;
     txn.manualCategory = true;
 
-    // Update type based on new category
     if (newCategory === "Income") {
       txn.type = "Income";
     } else if (newCategory === "Savings") {
