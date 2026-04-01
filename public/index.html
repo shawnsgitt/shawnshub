@@ -379,7 +379,12 @@ function monthName(m){
 }
 
 function homeView(){
-  if(!hasData())return emptyState();
+  if(!hasData())return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
+    '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'+
+    '<h2>Welcome to Finance Hub</h2>'+
+    '<p>Upload a bank statement to see your full financial snapshot — income, spending breakdown by category, recent transactions with dates, and account balances.</p>'+
+    '<div style="margin-top:16px"><span style="display:inline-block;padding:12px 24px;border-radius:12px;background:var(--purple);color:#fff;font-size:14px;font-weight:600;cursor:pointer" onclick="cv=\'upload\';document.querySelectorAll(\'.ni\').forEach(function(e){e.classList.toggle(\'on\',e.dataset.v===\'upload\')});destroyCharts();render()">Upload Statement</span></div>'+
+    '</div>';
   var accts=accounts();
   var cashTotal=0,debtTotal=0;
   accts.forEach(function(a){
@@ -432,8 +437,14 @@ function homeView(){
     '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
   '</div>'+
 
-  '<div class="snap-divider fi" style="animation-delay:.18s"></div>'+
-  '<div class="sec fi" style="animation-delay:.2s"><div class="stitle">Accounts</div>'+
+  // ── Monthly category breakdown ──
+  monthCategoryBreakdownHtml(mt,mSpending)+
+
+  // ── Recent transactions with dates ──
+  recentTransactionsHtml(mt)+
+
+  '<div class="snap-divider fi" style="animation-delay:.55s"></div>'+
+  '<div class="sec fi" style="animation-delay:.58s"><div class="stitle">Accounts</div>'+
   accts.map(function(a){
     var bal=latestBalance(a);
     var isDebt=isDebtAccount(a);
@@ -441,6 +452,121 @@ function homeView(){
     return'<div class="row"><div class="dot" style="background:'+(isDebt?"var(--red)":"var(--green)")+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="rname">'+a+'</span><span class="ramt" style="color:'+(isDebt?"var(--red)":"var(--green)")+'">'+(bal<0?"-":"")+f(Math.abs(bal))+'</span></div><div style="font-size:10px;color:var(--dim);margin-top:2px">'+txnCount+' transaction'+(txnCount!==1?'s':'')+(isDebt?' &middot; Debt account':'')+'</div></div></div>';
   }).join("")+
   '</div>';
+}
+
+// ───────── MONTHLY CATEGORY BREAKDOWN (for home page) ─────────
+function monthCategoryBreakdownHtml(mt,totalSpending){
+  // Build category totals from this month's transactions
+  var catMap={};
+  mt.forEach(function(t){
+    var effectiveType=t.type;
+    var effectiveCat=t.category;
+    if(t.category==="Pending Review"&&t.suggestedCategory){
+      effectiveCat=t.suggestedCategory;
+      effectiveType=t.suggestedType||typeForCategory(t.suggestedCategory);
+    }
+    if(effectiveType!=="Expense")return;
+    if(!catMap[effectiveCat])catMap[effectiveCat]={total:0,count:0};
+    catMap[effectiveCat].total+=t.absAmount;
+    catMap[effectiveCat].count++;
+  });
+  var cats=Object.entries(catMap).map(function(e){
+    return{name:e[0],total:Math.round(e[1].total*100)/100,count:e[1].count,pct:totalSpending>0?Math.round(e[1].total/totalSpending*1000)/10:0};
+  }).sort(function(a,b){return b.total-a.total});
+
+  if(cats.length===0)return'';
+
+  var html='<div class="snap-divider fi" style="animation-delay:.18s"></div>'+
+    '<div class="snap-section-title fi" style="animation-delay:.19s">Spending by category</div>';
+
+  for(var i=0;i<cats.length;i++){
+    var c=cats[i];
+    html+='<div class="row fi" style="animation-delay:'+(.2+i*0.02)+'s"><div class="dot" style="background:'+cc(c.name)+'"></div><div style="flex:1">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span class="rname">'+c.name+'</span><span class="ramt" style="color:'+cc(c.name)+'">'+f(c.total)+'</span></div>'+
+      '<div class="rbar"><span style="width:'+c.pct+'%;background:'+cc(c.name)+'"></span></div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:2px">'+c.count+' transaction'+(c.count!==1?'s':'')+' &middot; '+c.pct+'%</div>'+
+    '</div></div>';
+  }
+  return html;
+}
+
+// ───────── RECENT TRANSACTIONS WITH DATES (for home page) ─────────
+function formatDateLabel(dateStr){
+  // dateStr is DD/MM/YYYY — convert to a friendly label
+  var p=dateStr.split("/");
+  if(p.length<3)return dateStr;
+  var d=parseInt(p[0],10),m=parseInt(p[1],10),y=parseInt(p[2],10);
+  var dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  var monthNames=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  var dt=new Date(y,m-1,d);
+  return dayNames[dt.getDay()]+', '+d+' '+monthNames[m]+' '+y;
+}
+
+function recentTransactionsHtml(mt){
+  if(!mt||mt.length===0)return'';
+
+  // Sort by date descending, then by original order
+  var sorted=mt.slice().sort(function(a,b){
+    var pa=a.date.split("/"),pb=b.date.split("/");
+    var da=new Date(pa[2],pa[1]-1,pa[0]),db=new Date(pb[2],pb[1]-1,pb[0]);
+    return db-da;
+  });
+
+  // Group by date
+  var groups=[];
+  var currentDate='';
+  sorted.forEach(function(t){
+    if(t.date!==currentDate){
+      currentDate=t.date;
+      groups.push({date:t.date,label:formatDateLabel(t.date),txns:[]});
+    }
+    groups[groups.length-1].txns.push(t);
+  });
+
+  // Show up to 15 transactions across date groups
+  var html='<div class="snap-divider fi" style="animation-delay:.35s"></div>'+
+    '<div class="snap-section-title fi" style="animation-delay:.36s">Recent transactions</div>';
+
+  var shown=0;
+  var maxShow=15;
+  for(var g=0;g<groups.length&&shown<maxShow;g++){
+    var grp=groups[g];
+    // Date group header
+    var dayTotal=0;
+    grp.txns.forEach(function(t){
+      var et=t.type;
+      if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+      if(et==="Expense")dayTotal+=t.absAmount;
+    });
+    html+='<div class="fi" style="animation-delay:'+(.37+g*0.02)+'s;display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px">'+
+      '<span style="font-size:11px;font-weight:600;color:var(--muted)">'+grp.label+'</span>'+
+      (dayTotal>0?'<span style="font-size:11px;color:var(--red);font-weight:600">-'+f(dayTotal)+' spent</span>':'')+
+    '</div>';
+
+    for(var ti=0;ti<grp.txns.length&&shown<maxShow;ti++){
+      var t=grp.txns[ti];
+      var effectiveType=t.type;
+      if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
+      var amtColor=effectiveType==="Income"||effectiveType==="Cash In"?"var(--green)":effectiveType==="Savings"?"var(--purple)":effectiveType==="Non-Transactional"?"var(--dim)":"var(--red)";
+      var amtPrefix=effectiveType==="Income"||effectiveType==="Cash In"?"+":effectiveType==="Non-Transactional"?"":"-";
+      var displayCat=t.category==="Pending Review"&&t.suggestedCategory?t.suggestedCategory:t.category;
+      html+='<div class="row fi" style="animation-delay:'+(.38+shown*0.02)+'s;padding:8px 12px">'+
+        '<div class="dot" style="background:'+cc(displayCat)+'"></div>'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(t.description)+'</div>'+
+          '<div style="font-size:10px;color:var(--dim);margin-top:2px">'+displayCat+'</div>'+
+        '</div>'+
+        '<div style="font-size:13px;font-weight:700;color:'+amtColor+';flex-shrink:0;margin-left:8px">'+amtPrefix+f(t.absAmount)+'</div>'+
+      '</div>';
+      shown++;
+    }
+  }
+
+  if(mt.length>maxShow){
+    html+='<div style="text-align:center;padding:10px 0"><span style="font-size:11px;color:var(--purple);cursor:pointer" onclick="cv=\'transactions\';document.querySelectorAll(\'.ni\').forEach(function(e){e.classList.toggle(\'on\',e.dataset.v===\'transactions\')});destroyCharts();render()">View all '+mt.length+' transactions &rarr;</span></div>';
+  }
+
+  return html;
 }
 
 // ───────── UPLOAD VIEW ─────────
@@ -1385,18 +1511,44 @@ function breakdownView(){
   // Income vs Spending vs Savings doughnut
   html+='<div class="sec fi" style="animation-delay:.1s"><div class="ccard"><h3>Income vs Spending vs Savings</h3><div class="cwrap"><canvas id="ch3"></canvas></div></div></div>';
 
-  // Detailed category list with transaction counts
+  // Detailed category list with transaction details and dates
   html+='<div class="sec fi" style="animation-delay:.15s"><div class="stitle">All Categories Detail</div>';
   for(var i=0;i<cats.length;i++){
     var c=cats[i];
     // Find individual transactions for this category
     var catTxns=expenses().filter(function(t){return t.category===c.name});
+    // Sort by date descending
+    catTxns.sort(function(a,b){
+      var pa=a.date.split("/"),pb=b.date.split("/");
+      var da=new Date(pa[2],pa[1]-1,pa[0]),db=new Date(pb[2],pb[1]-1,pb[0]);
+      return db-da;
+    });
     var avgPerTxn=c.count>0?Math.round(c.total/c.count*100)/100:0;
-    html+='<div class="row"><div class="dot" style="background:'+cc(c.name)+'"></div><div style="flex:1">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center"><span class="rname">'+c.name+'</span><span class="ramt" style="color:'+cc(c.name)+'">'+f(c.total)+'</span></div>'+
+    html+='<div style="background:var(--s1);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--border)">';
+    html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class="dot" style="background:'+cc(c.name)+'"></div><div style="flex:1">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">'+c.name+'</span><span style="font-size:15px;font-weight:700;color:'+cc(c.name)+'">'+f(c.total)+'</span></div>'+
       '<div class="rbar"><span style="width:'+c.percentage+'%;background:'+cc(c.name)+'"></span></div>'+
-      '<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:10px;color:var(--dim)">'+c.count+' transactions &middot; '+c.percentage+'%</span><span style="font-size:10px;color:var(--dim)">avg '+f(avgPerTxn)+'/txn</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:10px;color:var(--dim)">'+c.count+' transaction'+(c.count!==1?'s':'')+' &middot; '+c.percentage+'%</span><span style="font-size:10px;color:var(--dim)">avg '+f(avgPerTxn)+'/txn</span></div>'+
     '</div></div>';
+    // Show individual transactions under this category
+    if(catTxns.length>0){
+      var showMax=5;
+      var txnsToShow=catTxns.slice(0,showMax);
+      html+='<div style="border-top:1px solid var(--border);padding-top:8px">';
+      for(var j=0;j<txnsToShow.length;j++){
+        var txn=txnsToShow[j];
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:11px">'+
+          '<span style="color:var(--dim);flex-shrink:0;min-width:70px">'+txn.date+'</span>'+
+          '<span style="flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(txn.description)+'</span>'+
+          '<span style="color:var(--red);font-weight:600;flex-shrink:0">-'+f(txn.absAmount)+'</span>'+
+        '</div>';
+      }
+      if(catTxns.length>showMax){
+        html+='<div style="font-size:10px;color:var(--dim);padding:4px 0;text-align:center">+'+( catTxns.length-showMax)+' more transaction'+(catTxns.length-showMax!==1?'s':'')+'</div>';
+      }
+      html+='</div>';
+    }
+    html+='</div>';
   }
   html+='</div>';
 
