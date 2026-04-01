@@ -74,6 +74,58 @@ function findHeaderRow(sheet) {
   return -1;
 }
 
+function detectSignConvention(rawEntries) {
+  // Use balance changes to detect if positive amounts mean expense (inverted)
+  // Check consecutive rows where balance is available
+  let balanceVotes = { normal: 0, inverted: 0 };
+  for (let i = 1; i < rawEntries.length; i++) {
+    const prev = rawEntries[i - 1];
+    const curr = rawEntries[i];
+    if (prev.balance != null && curr.balance != null && curr.amount !== 0) {
+      const balanceDelta = curr.balance - prev.balance;
+      // If amount sign matches balance change direction, sign convention is normal
+      // (positive amount = balance goes up = income)
+      if (Math.abs(balanceDelta - curr.amount) < 0.02) {
+        balanceVotes.normal++;
+      } else if (Math.abs(balanceDelta + curr.amount) < 0.02) {
+        balanceVotes.inverted++;
+      }
+    }
+  }
+  if (balanceVotes.normal + balanceVotes.inverted >= 2) {
+    return balanceVotes.inverted > balanceVotes.normal ? "inverted" : "normal";
+  }
+
+  // Fallback: use category-based heuristics
+  // If known expense categories (Groceries, Bills, etc.) have positive amounts, sign is inverted
+  let expensePositive = 0, expenseNegative = 0;
+  let incomePositive = 0, incomeNegative = 0;
+  const expenseCategories = new Set([
+    "Groceries", "Eating Out", "Transport", "Shopping", "Subscriptions",
+    "Bills & Utilities", "Health & Fitness", "Entertainment", "Education", "Personal Care"
+  ]);
+
+  for (const entry of rawEntries) {
+    const cat = categorize(entry.description);
+    if (expenseCategories.has(cat)) {
+      if (entry.amount > 0) expensePositive++;
+      else if (entry.amount < 0) expenseNegative++;
+    } else if (cat === "Income") {
+      if (entry.amount > 0) incomePositive++;
+      else if (entry.amount < 0) incomeNegative++;
+    }
+  }
+
+  // If most recognizable expenses are positive, the sign convention is inverted
+  if (expensePositive > expenseNegative && expensePositive >= 2) return "inverted";
+  if (incomeNegative > incomePositive && incomeNegative >= 2) return "inverted";
+  // If most recognizable income is positive, convention is normal
+  if (incomePositive > incomeNegative && incomePositive >= 2) return "normal";
+  if (expenseNegative > expensePositive && expenseNegative >= 2) return "normal";
+
+  return "normal";
+}
+
 function parseExcelSheet(rows, headers) {
   if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
@@ -90,7 +142,11 @@ function parseExcelSheet(rows, headers) {
     throw new Error("Could not find a Date column. Please ensure your Excel file has a Date header.");
   }
 
-  const transactions = [];
+  // Track whether we're using separate debit/credit columns
+  const hasSeparateDebitCredit = (debitCol >= 0 || creditCol >= 0) && amountCol < 0;
+
+  // First pass: parse raw amounts and metadata
+  const rawEntries = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -109,32 +165,52 @@ function parseExcelSheet(rows, headers) {
     if (!date || !description) continue;
 
     let amount = 0;
-    if (amountCol >= 0) {
+    if (hasSeparateDebitCredit) {
+      // Separate debit/credit columns: debit = money out (expense), credit = money in (income)
+      const debit = debitCol >= 0 ? Math.abs(parseAmount(values[debitCol])) : 0;
+      const credit = creditCol >= 0 ? Math.abs(parseAmount(values[creditCol])) : 0;
+      // Credit (money in) is positive, Debit (money out) is negative
+      amount = credit - debit;
+    } else if (amountCol >= 0) {
       amount = parseAmount(values[amountCol]);
-    } else if (debitCol >= 0 || creditCol >= 0) {
-      const debit = debitCol >= 0 ? parseAmount(values[debitCol]) : 0;
-      const credit = creditCol >= 0 ? parseAmount(values[creditCol]) : 0;
-      amount = credit > 0 ? credit : -Math.abs(debit);
     }
 
     const balance = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
-    const category = categorize(description);
+
+    rawEntries.push({ index: i, date, description, amount, balance });
+  }
+
+  // For single amount column, detect if sign convention is inverted
+  // (positive = expense instead of positive = income)
+  if (!hasSeparateDebitCredit && amountCol >= 0) {
+    const convention = detectSignConvention(rawEntries);
+    if (convention === "inverted") {
+      for (const entry of rawEntries) {
+        entry.amount = -entry.amount;
+      }
+    }
+  }
+
+  // Second pass: build final transactions with corrected amounts
+  const transactions = [];
+  for (const entry of rawEntries) {
+    const category = categorize(entry.description);
     const type =
       category === "Income"
         ? "Income"
         : category === "Savings"
           ? "Savings"
-          : amount > 0
+          : entry.amount > 0
             ? "Income"
             : "Expense";
 
     transactions.push({
-      id: `txn_${Date.now()}_${i}`,
-      date,
-      description,
-      amount,
-      absAmount: Math.abs(amount),
-      balance,
+      id: `txn_${Date.now()}_${entry.index}`,
+      date: entry.date,
+      description: entry.description,
+      amount: entry.amount,
+      absAmount: Math.abs(entry.amount),
+      balance: entry.balance,
       category,
       type,
       manualCategory: false,
