@@ -136,28 +136,34 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .empty h2{font-size:18px;margin-bottom:8px;font-weight:700}
 .empty p{color:var(--muted);font-size:13px;line-height:1.5}
 
-.top-cat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
-.top-cat{background:var(--s1);border-radius:12px;padding:12px 10px;text-align:center}
-.top-cat .rank{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
-.top-cat .cat-name{font-size:12px;font-weight:600;margin-bottom:2px}
-.top-cat .cat-amt{font-size:16px;font-weight:700}
+@media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}.cwrap{height:240px}}
 
-.flow-bar{display:flex;height:24px;border-radius:8px;overflow:hidden;margin-bottom:6px}
-.flow-bar div{transition:width .8s ease}
-.flow-legend{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
-.flow-legend span{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
-.flow-legend .ldot{width:8px;height:8px;border-radius:2px}
-
-@media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}.cwrap{height:260px}.top-cat-grid{grid-template-columns:repeat(3,1fr)}}
+.snap-hero{text-align:center;padding:24px 0 20px}
+.snap-hero .nw-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.snap-hero .nw-val{font-size:40px;font-weight:800;letter-spacing:-1px}
+.snap-hero .nw-sub{font-size:12px;color:var(--dim);margin-top:4px}
+.snap-row{display:flex;gap:10px;margin-bottom:10px}
+.snap-card{flex:1;border-radius:14px;padding:16px;border:1px solid var(--border);background:var(--card)}
+.snap-card .sc-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.snap-card .sc-val{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.snap-card .sc-sub{font-size:10px;color:var(--dim);margin-top:4px}
+.snap-card.green .sc-val{color:var(--green)}
+.snap-card.red .sc-val{color:var(--red)}
+.snap-card.purple .sc-val{color:var(--purple)}
+.snap-card.amber .sc-val{color:var(--amber)}
+.snap-card.blue .sc-val{color:var(--blue)}
+.snap-divider{height:1px;background:var(--border);margin:18px 0}
+.snap-section-title{font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 <nav>
-<div class="ni on" data-v="upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload</span></div>
-<div class="ni" data-v="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Dashboard</span></div>
-<div class="ni" data-v="breakdown"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg><span>Breakdown</span></div>
-<div class="ni" data-v="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span>Insights</span></div>
+<div class="ni on" data-v="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></div>
+<div class="ni" data-v="upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload</span></div>
+<div class="ni" data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></div>
+<div class="ni" data-v="spending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg><span>Spending</span></div>
+<div class="ni" data-v="transactions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>Transactions</span></div>
 </nav>
 
 <script>
@@ -166,9 +172,7 @@ var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Fami
 function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 
-// All data held in memory only - never persisted
-var D=null; // { transactions:[], analysis:{} }
-var charts={},cv="upload";
+var D=null,charts={},cv="home",selAcct="all";
 
 document.querySelectorAll(".ni").forEach(function(el){
   el.addEventListener("click",function(){
@@ -199,13 +203,118 @@ function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absA
 function render(){
   var a=document.getElementById("app");
   destroyCharts();
-  if(cv==="upload")a.innerHTML=uploadView();
-  else if(cv==="dashboard")a.innerHTML=dashboardView();
-  else if(cv==="breakdown")a.innerHTML=breakdownView();
-  else if(cv==="insights")a.innerHTML=insightsView();
+  if(cv==="home")a.innerHTML=homeView();
+  else if(cv==="upload")a.innerHTML=uploadView();
+  else if(cv==="overview")a.innerHTML=overviewView();
+  else if(cv==="spending")a.innerHTML=spendingView();
+  else if(cv==="transactions")a.innerHTML=txnView();
   initCharts();
   bindUpload();
   bindUncatClicks();
+}
+
+// ───────── HOME / FINANCIAL SNAPSHOT ─────────
+function latestBalance(acctName){
+  var txns=D.accounts[acctName];
+  if(!txns||!txns.length)return 0;
+  var sorted=txns.slice().sort(function(a,b){
+    if(a.date>b.date)return 1;if(a.date<b.date)return -1;return 0;
+  });
+  for(var i=sorted.length-1;i>=0;i--){
+    if(sorted[i].balance!=null&&!isNaN(sorted[i].balance))return sorted[i].balance;
+  }
+  return 0;
+}
+
+function isDebtAccount(name){
+  var n=name.toLowerCase();
+  return n.indexOf("credit")!==-1||n.indexOf("card")!==-1||n.indexOf("loan")!==-1||n.indexOf("debt")!==-1||n.indexOf("overdraft")!==-1;
+}
+
+function latestMonth(){
+  var all=filtered();
+  if(!all.length)return null;
+  var dates=all.map(function(t){
+    var p=t.date.split("/");
+    return{y:parseInt(p[2],10),m:parseInt(p[1],10)};
+  });
+  dates.sort(function(a,b){return b.y-a.y||b.m-a.m});
+  return dates[0];
+}
+
+function monthlyTxns(){
+  var lm=latestMonth();
+  if(!lm)return[];
+  return filtered().filter(function(t){
+    var p=t.date.split("/");
+    return parseInt(p[1],10)===lm.m&&parseInt(p[2],10)===lm.y;
+  });
+}
+
+function monthName(m){
+  var names=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return names[m]||"";
+}
+
+function homeView(){
+  if(!hasData())return emptyState();
+  var accts=accounts();
+  var cashTotal=0,debtTotal=0;
+  accts.forEach(function(a){
+    var bal=latestBalance(a);
+    if(isDebtAccount(a)){
+      debtTotal+=Math.abs(bal);
+    }else{
+      cashTotal+=bal;
+    }
+  });
+  var netWorth=cashTotal-debtTotal;
+
+  var mt=monthlyTxns();
+  var mIncome=0,mSpending=0;
+  mt.forEach(function(t){
+    if(t.type==="Income")mIncome+=Math.abs(t.amount||t.absAmount||0);
+    else if(t.type==="Expense")mSpending+=Math.abs(t.amount||t.absAmount||0);
+  });
+  var leftAfter=mIncome-mSpending;
+
+  var lm=latestMonth();
+  var monthLabel=lm?monthName(lm.m)+" "+lm.y:"This month";
+
+  return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
+  acctSelector()+
+  '<div class="snap-hero fi">'+
+    '<div class="nw-label">Net Worth</div>'+
+    '<div class="nw-val" style="color:'+(netWorth>=0?"var(--green)":"var(--red)")+'">'+(netWorth<0?"-":"")+f(Math.abs(netWorth))+'</div>'+
+    '<div class="nw-sub">Cash minus debt</div>'+
+  '</div>'+
+
+  '<div class="snap-row fi" style="animation-delay:.05s">'+
+    '<div class="snap-card green"><div class="sc-label">Cash on hand</div><div class="sc-val">'+f(cashTotal)+'</div><div class="sc-sub">Across '+accts.filter(function(a){return !isDebtAccount(a)}).length+' account'+(accts.filter(function(a){return !isDebtAccount(a)}).length!==1?'s':'')+'</div></div>'+
+    '<div class="snap-card red"><div class="sc-label">Total debt</div><div class="sc-val">'+f(debtTotal)+'</div><div class="sc-sub">'+(debtTotal>0?accts.filter(isDebtAccount).length+' account'+(accts.filter(isDebtAccount).length!==1?'s':''):'No debt accounts')+'</div></div>'+
+  '</div>'+
+
+  '<div class="snap-divider fi" style="animation-delay:.1s"></div>'+
+  '<div class="snap-section-title fi" style="animation-delay:.1s">Monthly breakdown &middot; '+monthLabel+'</div>'+
+
+  '<div class="snap-row fi" style="animation-delay:.12s">'+
+    '<div class="snap-card green"><div class="sc-label">Income</div><div class="sc-val">'+f(mIncome)+'</div></div>'+
+    '<div class="snap-card red"><div class="sc-label">Spending</div><div class="sc-val">'+f(mSpending)+'</div></div>'+
+  '</div>'+
+
+  '<div class="snap-row fi" style="animation-delay:.15s">'+
+    '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
+  '</div>'+
+
+  '<div class="snap-divider fi" style="animation-delay:.18s"></div>'+
+  '<div class="sec fi" style="animation-delay:.2s"><div class="stitle">Accounts</div>'+
+  accts.map(function(a){
+    var bal=latestBalance(a);
+    var isDebt=isDebtAccount(a);
+    var txnCount=D.accounts[a].length;
+    return'<div class="row"><div class="dot" style="background:'+(isDebt?"var(--red)":"var(--green)")+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="rname">'+a+'</span><span class="ramt" style="color:'+(isDebt?"var(--red)":"var(--green)")+'">'+(bal<0?"-":"")+f(Math.abs(bal))+'</span></div><div style="font-size:10px;color:var(--dim);margin-top:2px">'+txnCount+' transaction'+(txnCount!==1?'s':'')+(isDebt?' &middot; Debt account':'')+'</div></div></div>';
+  }).join("")+
+  '</div>';
 }
 
 // ───────── UPLOAD VIEW ─────────
