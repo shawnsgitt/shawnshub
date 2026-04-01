@@ -136,6 +136,47 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .empty h2{font-size:18px;margin-bottom:8px;font-weight:700}
 .empty p{color:var(--muted);font-size:13px;line-height:1.5}
 
+/* Hub sections */
+.hub-menu{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.hub-item{background:var(--card);border-radius:14px;padding:18px 16px;border:1px solid var(--border);cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:12px}
+.hub-item:active{background:var(--s2);border-color:var(--purple)}
+.hub-item .hi-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.hub-item .hi-info{flex:1;min-width:0}
+.hub-item .hi-name{font-size:13px;font-weight:600}
+.hub-item .hi-sub{font-size:10px;color:var(--dim);margin-top:2px}
+.back-btn{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--purple);cursor:pointer;margin-bottom:12px;padding:6px 0}
+.back-btn:active{opacity:.7}
+.form-group{margin-bottom:14px}
+.form-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block}
+.form-input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px;outline:none}
+.form-input:focus{border-color:var(--purple)}
+.form-select{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px;outline:none;appearance:none;cursor:pointer}
+.form-select:focus{border-color:var(--purple)}
+.btn-primary{width:100%;padding:13px;border-radius:12px;border:none;background:var(--purple);color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn-primary:active{opacity:.8}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:8px 14px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-sm:active{opacity:.8}
+.btn-danger{background:var(--rbg);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-edit{background:var(--pbg);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
+.item-card{background:var(--s1);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--border)}
+.item-card .item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.item-card .item-name{font-size:14px;font-weight:600}
+.item-card .item-detail{font-size:11px;color:var(--muted);margin-bottom:4px}
+.item-card .item-actions{display:flex;gap:6px;margin-top:8px}
+.status-pill{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600}
+.status-pill.paid{background:var(--gbg);color:var(--green)}
+.status-pill.pending{background:var(--abg);color:var(--amber)}
+.status-pill.overdue{background:var(--rbg);color:var(--red)}
+.goal-card{background:var(--card);border-radius:14px;padding:16px;border:1px solid var(--border);margin-bottom:10px}
+.goal-card .goal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.goal-card .goal-name{font-size:14px;font-weight:600}
+.goal-card .goal-amounts{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px}
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.summary-stat{background:var(--s1);border-radius:10px;padding:12px;text-align:center;border:1px solid var(--border)}
+.summary-stat .ss-val{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.summary-stat .ss-label{font-size:10px;color:var(--dim);margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
+
 @media(min-width:600px){.kgrid{grid-template-columns:repeat(4,1fr)}.cwrap{height:240px}}
 
 .flow-bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:8px}
@@ -190,8 +231,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 <div class="ni on" data-v="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Home</span></div>
 <div class="ni" data-v="upload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Upload</span></div>
 <div class="ni" data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></div>
-<div class="ni" data-v="spending"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 100 4 2 2 0 000-4z"/></svg><span>Spending</span></div>
 <div class="ni" data-v="transactions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>Transactions</span></div>
+<div class="ni" data-v="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>More</span></div>
 </nav>
 
 <script>
@@ -201,10 +242,14 @@ function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 
 var D=null,charts={},cv="home",selAcct="all";
+var hubSection=null; // tracks which "more" sub-section is active
+var hubCache={}; // in-memory cache of hub data loaded from API
+var hubForms={}; // tracks form states
 
 document.querySelectorAll(".ni").forEach(function(el){
   el.addEventListener("click",function(){
     cv=el.dataset.v;
+    if(cv!=="more")hubSection=null;
     document.querySelectorAll(".ni").forEach(function(e){e.classList.toggle("on",e.dataset.v===cv)});
     // Close any open modal when navigating
     var openModal=document.querySelector(".modal-bg");
@@ -280,13 +325,14 @@ function render(){
   if(cv==="home")a.innerHTML=homeView();
   else if(cv==="upload")a.innerHTML=uploadView();
   else if(cv==="overview")a.innerHTML=dashboardView();
-  else if(cv==="spending")a.innerHTML=breakdownView();
   else if(cv==="transactions")a.innerHTML=txnView();
+  else if(cv==="more")a.innerHTML=moreView();
   initCharts();
   bindUpload();
   bindUncatClicks();
   bindAcctSelector();
   bindTxnEvents();
+  bindHubEvents();
 }
 
 // ───────── HOME / FINANCIAL SNAPSHOT ─────────
@@ -1181,12 +1227,16 @@ function dashboardView(){
 
 // ───────── BREAKDOWN VIEW ─────────
 function breakdownView(){
-  if(!hasData())return emptyState("Breakdown");
+  if(!hasData()){
+    var html2=hubBackBtn("Spending Breakdown");
+    html2+='<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No data yet</h2><p>Upload a bank statement in the Upload tab to see your spending breakdown here.</p></div>';
+    return html2;
+  }
   var a=D.analysis;
   var cats=a.categoryBreakdown;
   var ti=a.totalIncome,ts=a.totalExpenses;
 
-  var html='<div class="head fi"><h1>Spending Breakdown</h1></div>';
+  var html=hubBackBtn("Spending Breakdown");
 
   // Spend ratio
   html+='<div class="kgrid fi">'+
@@ -1396,6 +1446,678 @@ function initCharts(){
       tooltip:{callbacks:{label:function(ctx){return ctx.label+": £"+ctx.raw.toLocaleString("en-GB")}}}},
       scales:{r:{grid:{color:"rgba(45,58,82,.3)"},ticks:{display:false}}},animation:{duration:800}}});
   }
+}
+
+// ───────── HUB DATA API HELPERS ─────────
+async function hubLoad(collection){
+  try{
+    var r=await fetch("/api/hub-data?collection="+collection);
+    var d=await r.json();
+    hubCache[collection]=d;
+    return d;
+  }catch(e){
+    hubCache[collection]={items:[]};
+    return{items:[]};
+  }
+}
+async function hubAdd(collection,item){
+  try{
+    var r=await fetch("/api/hub-data?collection="+collection,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"add",item:item})});
+    var d=await r.json();
+    return d;
+  }catch(e){toast(e.message,true);return null}
+}
+async function hubUpdate(collection,item){
+  try{
+    await fetch("/api/hub-data?collection="+collection,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"update",item:item})});
+  }catch(e){toast(e.message,true)}
+}
+async function hubDelete(collection,id){
+  try{
+    await fetch("/api/hub-data?collection="+collection,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"delete",id:id})});
+  }catch(e){toast(e.message,true)}
+}
+
+// ───────── MORE / HUB MENU VIEW ─────────
+function moreView(){
+  if(hubSection)return hubSectionView(hubSection);
+  var html='<div class="head fi"><h1>Financial Hub</h1><div class="live"></div></div>';
+  html+='<div class="hub-menu fi">';
+  var items=[
+    {key:"spending",name:"Spending",sub:"Category breakdown",icon:"&#128176;",bg:"var(--rbg)",color:"var(--red)"},
+    {key:"income",name:"Income",sub:"Track income sources",icon:"&#128178;",bg:"var(--gbg)",color:"var(--green)"},
+    {key:"budget",name:"Budget",sub:"Planned vs actual",icon:"&#128200;",bg:"var(--pbg)",color:"var(--purple)"},
+    {key:"savings-goals",name:"Savings Goals",sub:"Track your targets",icon:"&#127919;",bg:"var(--abg)",color:"var(--amber)"},
+    {key:"debt",name:"Debt Tracker",sub:"Manage what you owe",icon:"&#128179;",bg:"var(--rbg)",color:"var(--red)"},
+    {key:"investments",name:"Investments",sub:"Track growth",icon:"&#128200;",bg:"rgba(59,130,246,.1)",color:"var(--blue)"},
+    {key:"bills",name:"Bills & Due Dates",sub:"Never miss a payment",icon:"&#128197;",bg:"rgba(6,182,212,.1)",color:"var(--cyan)"},
+    {key:"emergency",name:"Emergency Fund",sub:"Safety layer",icon:"&#128737;",bg:"var(--abg)",color:"var(--amber)"},
+    {key:"financial-goals",name:"Goals & Priorities",sub:"What the money is for",icon:"&#11088;",bg:"var(--gbg)",color:"var(--green)"}
+  ];
+  items.forEach(function(it){
+    html+='<div class="hub-item" data-hub="'+it.key+'"><div class="hi-icon" style="background:'+it.bg+';color:'+it.color+'">'+it.icon+'</div><div class="hi-info"><div class="hi-name">'+it.name+'</div><div class="hi-sub">'+it.sub+'</div></div></div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function hubSectionView(section){
+  if(section==="spending")return breakdownView();
+  if(section==="income")return incomeView();
+  if(section==="budget")return budgetView();
+  if(section==="savings-goals")return savingsGoalsView();
+  if(section==="debt")return debtView();
+  if(section==="investments")return investmentsView();
+  if(section==="bills")return billsView();
+  if(section==="emergency")return emergencyView();
+  if(section==="financial-goals")return financialGoalsView();
+  return moreView();
+}
+
+function hubBackBtn(title){
+  return'<div class="back-btn" id="hubBack">&#8592; Back to Hub</div><div class="head fi"><h1>'+title+'</h1></div>';
+}
+
+function bindHubEvents(){
+  // Hub menu items
+  document.querySelectorAll("[data-hub]").forEach(function(el){
+    el.addEventListener("click",function(){
+      hubSection=el.dataset.hub;
+      loadHubSection(hubSection);
+    });
+  });
+  // Back button
+  var back=document.getElementById("hubBack");
+  if(back)back.addEventListener("click",function(){hubSection=null;render()});
+  // Bind section-specific events
+  if(hubSection==="income")bindIncomeEvents();
+  if(hubSection==="budget")bindBudgetEvents();
+  if(hubSection==="savings-goals")bindSavingsEvents();
+  if(hubSection==="debt")bindDebtEvents();
+  if(hubSection==="investments")bindInvestmentsEvents();
+  if(hubSection==="bills")bindBillsEvents();
+  if(hubSection==="emergency")bindEmergencyEvents();
+  if(hubSection==="financial-goals")bindGoalsEvents();
+}
+
+async function loadHubSection(section){
+  if(section==="spending"){render();return}
+  var a=document.getElementById("app");
+  a.innerHTML='<div style="text-align:center;padding:60px 0"><div style="width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px"></div><p style="color:var(--muted);font-size:13px">Loading...</p></div>';
+  await hubLoad(section);
+  render();
+}
+
+// ───────── INCOME VIEW ─────────
+var INCOME_TYPES=["Salary","Side Income","Freelance Income","Passive Income","Irregular Income"];
+
+function incomeView(){
+  var data=hubCache["income"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Income Tracker");
+
+  // Summary
+  var totalMonthly=items.filter(function(i){return i.frequency==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalAll)+'</div><div class="ss-label">All Sources</div></div>';
+  html+='</div>';
+
+  // Add form
+  html+='<div class="ccard fi"><h3>Add Income Source</h3>';
+  html+='<div class="form-group"><label class="form-label">Source Name</label><input class="form-input" id="incName" placeholder="e.g. Main job salary"></div>';
+  html+='<div class="form-group"><label class="form-label">Type</label><select class="form-select" id="incType">';
+  INCOME_TYPES.forEach(function(t){html+='<option value="'+t+'">'+t+'</option>'});
+  html+='</select></div>';
+  html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="incAmount" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="incFreq"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="bi-weekly">Bi-Weekly</option><option value="one-off">One-Off</option><option value="irregular">Irregular</option></select></div>';
+  html+='<button class="btn-primary" id="incAdd">Add Income Source</button></div>';
+
+  // List
+  if(items.length>0){
+    html+='<div class="sec fi"><div class="stitle">Income Sources</div>';
+    items.forEach(function(it){
+      var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type)+' &middot; '+escHtml(it.frequency||"monthly")+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function bindIncomeEvents(){
+  var addBtn=document.getElementById("incAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var name=document.getElementById("incName").value.trim();
+    var amount=parseFloat(document.getElementById("incAmount").value);
+    if(!name||!amount){toast("Please fill in name and amount",true);return}
+    addBtn.disabled=true;
+    await hubAdd("income",{name:name,type:document.getElementById("incType").value,amount:amount,frequency:document.getElementById("incFreq").value});
+    await hubLoad("income");
+    toast("Income source added");render();
+  });
+  document.querySelectorAll("[data-del-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("income",b.dataset.delIncome);
+      await hubLoad("income");toast("Removed");render();
+    });
+  });
+}
+
+// ───────── BUDGET VIEW ─────────
+function budgetView(){
+  var data=hubCache["budget"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Monthly Budget");
+
+  // Calculate totals
+  var totalExpected=0,totalPlanned=0,totalActual=0;
+  items.forEach(function(it){
+    if(it.budgetType==="income")totalExpected+=parseFloat(it.planned||0);
+    else{totalPlanned+=parseFloat(it.planned||0);totalActual+=parseFloat(it.actual||0)}
+  });
+  var diff=totalExpected-totalActual;
+
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalExpected)+'</div><div class="ss-label">Expected Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.2)"><div class="ss-val" style="color:var(--purple)">'+f(totalPlanned)+'</div><div class="ss-label">Planned Spending</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(239,68,68,.2)"><div class="ss-val" style="color:var(--red)">'+f(totalActual)+'</div><div class="ss-label">Actual Spending</div></div>';
+  html+='<div class="summary-stat" style="border-color:'+(diff>=0?"rgba(34,197,94,.2)":"rgba(239,68,68,.2)")+'"><div class="ss-val" style="color:'+(diff>=0?"var(--green)":"var(--red)")+'">'+(diff<0?"-":"")+f(Math.abs(diff))+'</div><div class="ss-label">Difference</div></div>';
+  html+='</div>';
+
+  // Add budget line form
+  html+='<div class="ccard fi"><h3>Add Budget Line</h3>';
+  html+='<div class="form-group"><label class="form-label">Category</label><input class="form-input" id="budCat" placeholder="e.g. Groceries, Rent, Salary"></div>';
+  html+='<div class="form-group"><label class="form-label">Type</label><select class="form-select" id="budType"><option value="expense">Expense</option><option value="income">Income</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Planned Amount (£)</label><input class="form-input" id="budPlanned" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Actual Amount (£)</label><input class="form-input" id="budActual" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Month</label><input class="form-input" id="budMonth" type="month"></div>';
+  html+='<button class="btn-primary" id="budAdd">Add Budget Line</button></div>';
+
+  // List budget lines
+  if(items.length>0){
+    // Group by month
+    var months={};
+    items.forEach(function(it){var m=it.month||"Unset";if(!months[m])months[m]=[];months[m].push(it)});
+    Object.keys(months).sort().reverse().forEach(function(m){
+      html+='<div class="sec fi"><div class="stitle">'+m+'</div>';
+      months[m].forEach(function(it){
+        var planned=parseFloat(it.planned||0);
+        var actual=parseFloat(it.actual||0);
+        var diff2=planned-actual;
+        var isIncome=it.budgetType==="income";
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.category)+'</div><div class="item-detail">'+(isIncome?"Income":"Expense")+'</div></div><div style="text-align:right"><div style="font-size:11px;color:var(--muted)">Planned: '+f(planned)+'</div><div style="font-size:11px;color:var(--muted)">Actual: '+f(actual)+'</div><div style="font-size:13px;font-weight:700;color:'+(diff2>=0?"var(--green)":"var(--red)")+'">'+(diff2>=0?"+":"-")+f(Math.abs(diff2))+'</div></div></div>';
+        if(!isIncome){
+          var pct=planned>0?Math.min(100,Math.round(actual/planned*100)):0;
+          html+='<div class="progress-bar"><span style="width:'+pct+'%;background:'+(pct>100?"var(--red)":pct>80?"var(--amber)":"var(--green)")+'"></span></div>';
+          html+='<div style="font-size:10px;color:var(--dim)">'+pct+'% of budget used</div>';
+        }
+        html+='<div class="item-actions"><button class="btn-sm btn-danger" data-del-budget="'+it.id+'">Remove</button></div></div>';
+      });
+      html+='</div>';
+    });
+  }
+  return html;
+}
+
+function bindBudgetEvents(){
+  var addBtn=document.getElementById("budAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var cat=document.getElementById("budCat").value.trim();
+    var planned=parseFloat(document.getElementById("budPlanned").value);
+    if(!cat||!planned){toast("Please fill in category and planned amount",true);return}
+    addBtn.disabled=true;
+    await hubAdd("budget",{category:cat,budgetType:document.getElementById("budType").value,planned:planned,actual:parseFloat(document.getElementById("budActual").value)||0,month:document.getElementById("budMonth").value||new Date().toISOString().slice(0,7)});
+    await hubLoad("budget");toast("Budget line added");render();
+  });
+  document.querySelectorAll("[data-del-budget]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("budget",b.dataset.delBudget);await hubLoad("budget");toast("Removed");render();
+    });
+  });
+}
+
+// ───────── SAVINGS GOALS VIEW ─────────
+function savingsGoalsView(){
+  var data=hubCache["savings-goals"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Savings Goals");
+
+  html+='<div class="ccard fi"><h3>Add Savings Goal</h3>';
+  html+='<div class="form-group"><label class="form-label">Goal Name</label><select class="form-select" id="sgName"><option value="">Choose or type custom...</option><option value="Emergency Fund">Emergency Fund</option><option value="Travel">Travel</option><option value="Car">Car</option><option value="House Deposit">House Deposit</option><option value="Tuition">Tuition</option><option value="Business Fund">Business Fund</option><option value="custom">Custom...</option></select></div>';
+  html+='<div class="form-group" id="sgCustomWrap" style="display:none"><label class="form-label">Custom Goal Name</label><input class="form-input" id="sgCustom" placeholder="Your goal name"></div>';
+  html+='<div class="form-group"><label class="form-label">Target Amount (£)</label><input class="form-input" id="sgTarget" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Current Amount (£)</label><input class="form-input" id="sgCurrent" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Deadline</label><input class="form-input" id="sgDeadline" type="date"></div>';
+  html+='<button class="btn-primary" id="sgAdd">Add Goal</button></div>';
+
+  if(items.length>0){
+    html+='<div class="sec fi"><div class="stitle">Your Goals</div>';
+    items.forEach(function(it){
+      var target=parseFloat(it.target||0);
+      var current=parseFloat(it.current||0);
+      var pct=target>0?Math.min(100,Math.round(current/target*100)):0;
+      var remaining=Math.max(0,target-current);
+      // Calculate monthly contribution needed
+      var monthlyNeeded=0;
+      if(it.deadline&&remaining>0){
+        var dl=new Date(it.deadline);var now=new Date();
+        var months=Math.max(1,(dl.getFullYear()-now.getFullYear())*12+(dl.getMonth()-now.getMonth()));
+        monthlyNeeded=Math.ceil(remaining/months);
+      }
+      html+='<div class="goal-card"><div class="goal-top"><div class="goal-name">'+escHtml(it.name)+'</div><div style="font-size:12px;font-weight:700;color:var(--purple)">'+pct+'%</div></div>';
+      html+='<div class="goal-amounts"><span>'+f(current)+' saved</span><span>'+f(target)+' target</span></div>';
+      html+='<div class="progress-bar"><span style="width:'+pct+'%;background:var(--purple)"></span></div>';
+      html+='<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--dim)">';
+      html+='<span>'+f(remaining)+' remaining</span>';
+      if(it.deadline)html+='<span>Deadline: '+it.deadline+'</span>';
+      html+='</div>';
+      if(monthlyNeeded>0)html+='<div style="font-size:12px;color:var(--amber);margin-top:6px;font-weight:600">Need '+f(monthlyNeeded)+'/month to reach goal</div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-edit-sg="'+it.id+'">Update Amount</button><button class="btn-sm btn-danger" data-del-sg="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function bindSavingsEvents(){
+  var nameSelect=document.getElementById("sgName");
+  if(nameSelect)nameSelect.addEventListener("change",function(){
+    var cw=document.getElementById("sgCustomWrap");
+    if(cw)cw.style.display=nameSelect.value==="custom"?"block":"none";
+  });
+  var addBtn=document.getElementById("sgAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var nameVal=document.getElementById("sgName").value;
+    var name=nameVal==="custom"?(document.getElementById("sgCustom").value.trim()):nameVal;
+    var target=parseFloat(document.getElementById("sgTarget").value);
+    if(!name||!target){toast("Please fill in name and target",true);return}
+    addBtn.disabled=true;
+    await hubAdd("savings-goals",{name:name,target:target,current:parseFloat(document.getElementById("sgCurrent").value)||0,deadline:document.getElementById("sgDeadline").value||""});
+    await hubLoad("savings-goals");toast("Goal added");render();
+  });
+  document.querySelectorAll("[data-del-sg]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("savings-goals",b.dataset.delSg);await hubLoad("savings-goals");toast("Removed");render();
+    });
+  });
+  document.querySelectorAll("[data-edit-sg]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["savings-goals"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editSg});
+      if(!item)return;
+      var val=prompt("Enter updated current amount (£):",item.current||"0");
+      if(val===null)return;
+      item.current=parseFloat(val)||0;
+      hubUpdate("savings-goals",item).then(function(){
+        hubLoad("savings-goals").then(function(){toast("Updated");render()});
+      });
+    });
+  });
+}
+
+// ───────── DEBT TRACKER VIEW ─────────
+function debtView(){
+  var data=hubCache["debt"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Debt Tracker");
+
+  var totalDebt=items.reduce(function(s,i){return s+parseFloat(i.balance||0)},0);
+  var totalMin=items.reduce(function(s,i){return s+parseFloat(i.minPayment||0)},0);
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(239,68,68,.2)"><div class="ss-val" style="color:var(--red)">'+f(totalDebt)+'</div><div class="ss-label">Total Debt</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalMin)+'</div><div class="ss-label">Min Payments/mo</div></div>';
+  html+='</div>';
+
+  html+='<div class="ccard fi"><h3>Add Debt</h3>';
+  html+='<div class="form-group"><label class="form-label">Type of Debt</label><select class="form-select" id="debtType"><option value="Credit Card">Credit Card</option><option value="Personal Loan">Personal Loan</option><option value="Student Loan">Student Loan</option><option value="Car Finance">Car Finance</option><option value="Mortgage">Mortgage</option><option value="Overdraft">Overdraft</option><option value="Other">Other</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Lender / Name</label><input class="form-input" id="debtName" placeholder="e.g. Barclays Credit Card"></div>';
+  html+='<div class="form-group"><label class="form-label">Balance (£)</label><input class="form-input" id="debtBal" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Interest Rate (%)</label><input class="form-input" id="debtRate" type="number" step="0.1" placeholder="0.0"></div>';
+  html+='<div class="form-group"><label class="form-label">Minimum Payment (£)</label><input class="form-input" id="debtMin" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Due Date (day of month)</label><input class="form-input" id="debtDue" type="number" min="1" max="31" placeholder="1-31"></div>';
+  html+='<div class="form-group"><label class="form-label">Repayment Strategy</label><select class="form-select" id="debtStrat"><option value="Minimum only">Minimum Only</option><option value="Avalanche (highest interest first)">Avalanche (Highest Interest)</option><option value="Snowball (smallest balance first)">Snowball (Smallest Balance)</option><option value="Extra payments">Extra Payments</option></select></div>';
+  html+='<button class="btn-primary" id="debtAdd">Add Debt</button></div>';
+
+  if(items.length>0){
+    // Sort by interest rate descending (avalanche priority)
+    var sorted=items.slice().sort(function(a,b){return(parseFloat(b.rate)||0)-(parseFloat(a.rate)||0)});
+    html+='<div class="sec fi"><div class="stitle">Your Debts (by interest rate)</div>';
+    sorted.forEach(function(it,idx){
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name||it.debtType)+'</div><div class="item-detail">'+escHtml(it.debtType)+' &middot; '+(it.rate||0)+'% APR &middot; Due: '+(it.dueDate?'day '+it.dueDate:'N/A')+'</div></div><div style="font-size:18px;font-weight:700;color:var(--red)">'+f(it.balance)+'</div></div>';
+      html+='<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);margin-top:4px"><span>Min payment: '+f(it.minPayment)+'</span><span>Strategy: '+escHtml(it.strategy||"N/A")+'</span></div>';
+      if(idx===0&&items.length>1)html+='<div style="font-size:11px;color:var(--amber);margin-top:6px;font-weight:600">&#9888; Highest interest — prioritize this</div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-edit-debt="'+it.id+'">Update Balance</button><button class="btn-sm btn-danger" data-del-debt="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function bindDebtEvents(){
+  var addBtn=document.getElementById("debtAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var name=document.getElementById("debtName").value.trim();
+    var balance=parseFloat(document.getElementById("debtBal").value);
+    if(!balance){toast("Please enter a balance",true);return}
+    addBtn.disabled=true;
+    await hubAdd("debt",{debtType:document.getElementById("debtType").value,name:name||document.getElementById("debtType").value,balance:balance,rate:parseFloat(document.getElementById("debtRate").value)||0,minPayment:parseFloat(document.getElementById("debtMin").value)||0,dueDate:document.getElementById("debtDue").value||"",strategy:document.getElementById("debtStrat").value});
+    await hubLoad("debt");toast("Debt added");render();
+  });
+  document.querySelectorAll("[data-del-debt]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("debt",b.dataset.delDebt);await hubLoad("debt");toast("Removed");render();
+    });
+  });
+  document.querySelectorAll("[data-edit-debt]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["debt"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editDebt});
+      if(!item)return;
+      var val=prompt("Enter updated balance (£):",item.balance||"0");
+      if(val===null)return;
+      item.balance=parseFloat(val)||0;
+      hubUpdate("debt",item).then(function(){hubLoad("debt").then(function(){toast("Updated");render()})});
+    });
+  });
+}
+
+// ───────── INVESTMENTS VIEW ─────────
+function investmentsView(){
+  var data=hubCache["investments"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Investments");
+
+  var totalInvested=items.reduce(function(s,i){return s+parseFloat(i.invested||0)},0);
+  var totalValue=items.reduce(function(s,i){return s+parseFloat(i.currentValue||0)},0);
+  var gainLoss=totalValue-totalInvested;
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(totalInvested)+'</div><div class="ss-label">Total Invested</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(totalValue)+'</div><div class="ss-label">Current Value</div></div>';
+  html+='<div class="summary-stat" style="border-color:'+(gainLoss>=0?"rgba(34,197,94,.2)":"rgba(239,68,68,.2)")+'"><div class="ss-val" style="color:'+(gainLoss>=0?"var(--green)":"var(--red)")+'">'+(gainLoss>=0?"+":"-")+f(Math.abs(gainLoss))+'</div><div class="ss-label">Gain / Loss</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.2)"><div class="ss-val" style="color:var(--purple)">'+(totalInvested>0?(gainLoss>=0?"+":"")+Math.round(gainLoss/totalInvested*100):0)+'%</div><div class="ss-label">Return</div></div>';
+  html+='</div>';
+
+  html+='<div class="ccard fi"><h3>Add Investment</h3>';
+  html+='<div class="form-group"><label class="form-label">Account Type</label><select class="form-select" id="invType"><option value="ISA">ISA</option><option value="Stocks & Shares ISA">Stocks & Shares ISA</option><option value="Pension">Pension</option><option value="General Investment">General Investment</option><option value="Crypto">Crypto</option><option value="Property">Property</option><option value="Other">Other</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Holdings / Description</label><input class="form-input" id="invHoldings" placeholder="e.g. Vanguard Global Index"></div>';
+  html+='<div class="form-group"><label class="form-label">Amount Invested (£)</label><input class="form-input" id="invAmount" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Current Value (£)</label><input class="form-input" id="invValue" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Contribution Frequency</label><select class="form-select" id="invFreq"><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Annually">Annually</option><option value="One-off">One-off</option></select></div>';
+  html+='<button class="btn-primary" id="invAdd">Add Investment</button></div>';
+
+  if(items.length>0){
+    html+='<div class="sec fi"><div class="stitle">Your Investments</div>';
+    items.forEach(function(it){
+      var invested=parseFloat(it.invested||0);
+      var val=parseFloat(it.currentValue||0);
+      var gl=val-invested;
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.holdings||it.accountType)+'</div><div class="item-detail">'+escHtml(it.accountType)+' &middot; '+escHtml(it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--blue)">'+f(val)+'</div><div style="font-size:11px;color:'+(gl>=0?"var(--green)":"var(--red)")+'">'+(gl>=0?"+":"-")+f(Math.abs(gl))+' ('+(invested>0?Math.round(gl/invested*100):0)+'%)</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-edit-inv="'+it.id+'">Update Value</button><button class="btn-sm btn-danger" data-del-inv="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function bindInvestmentsEvents(){
+  var addBtn=document.getElementById("invAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var invested=parseFloat(document.getElementById("invAmount").value);
+    if(!invested){toast("Please enter amount invested",true);return}
+    addBtn.disabled=true;
+    await hubAdd("investments",{accountType:document.getElementById("invType").value,holdings:document.getElementById("invHoldings").value.trim(),invested:invested,currentValue:parseFloat(document.getElementById("invValue").value)||invested,frequency:document.getElementById("invFreq").value});
+    await hubLoad("investments");toast("Investment added");render();
+  });
+  document.querySelectorAll("[data-del-inv]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("investments",b.dataset.delInv);await hubLoad("investments");toast("Removed");render();
+    });
+  });
+  document.querySelectorAll("[data-edit-inv]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["investments"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editInv});
+      if(!item)return;
+      var val=prompt("Enter updated current value (£):",item.currentValue||"0");
+      if(val===null)return;
+      item.currentValue=parseFloat(val)||0;
+      hubUpdate("investments",item).then(function(){hubLoad("investments").then(function(){toast("Updated");render()})});
+    });
+  });
+}
+
+// ───────── BILLS & DUE DATES VIEW ─────────
+function billsView(){
+  var data=hubCache["bills"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Bills & Due Dates");
+
+  var totalBills=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var overdue=items.filter(function(i){return getBillStatus(i)==="overdue"}).length;
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalBills)+'</div><div class="ss-label">Monthly Bills</div></div>';
+  html+='<div class="summary-stat" style="border-color:'+(overdue>0?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)")+'"><div class="ss-val" style="color:'+(overdue>0?"var(--red)":"var(--green)")+'">'+(overdue>0?overdue+" overdue":"All good")+'</div><div class="ss-label">Status</div></div>';
+  html+='</div>';
+
+  html+='<div class="ccard fi"><h3>Add Bill</h3>';
+  html+='<div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="billName" placeholder="e.g. Rent, Netflix, Electricity"></div>';
+  html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="billAmt" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Due Date (day of month)</label><input class="form-input" id="billDue" type="number" min="1" max="31" placeholder="1-31"></div>';
+  html+='<div class="form-group"><label class="form-label">Payment Method</label><select class="form-select" id="billMethod"><option value="Auto-pay (Direct Debit)">Auto-pay (Direct Debit)</option><option value="Manual">Manual</option><option value="Standing Order">Standing Order</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Status</label><select class="form-select" id="billStatus"><option value="paid">Paid</option><option value="pending">Pending</option><option value="overdue">Overdue</option></select></div>';
+  html+='<button class="btn-primary" id="billAdd">Add Bill</button></div>';
+
+  if(items.length>0){
+    // Sort by due date
+    var sorted=items.slice().sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)});
+    html+='<div class="sec fi"><div class="stitle">Recurring Bills</div>';
+    sorted.forEach(function(it){
+      var status=it.status||"pending";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">Due: day '+(it.dueDate||"?")+ ' &middot; '+escHtml(it.method||"Manual")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700">'+f(it.amount)+'</div><div class="status-pill '+status+'">'+status+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-bill="'+it.id+'">Toggle Status</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function getBillStatus(bill){
+  return bill.status||"pending";
+}
+
+function bindBillsEvents(){
+  var addBtn=document.getElementById("billAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var name=document.getElementById("billName").value.trim();
+    if(!name){toast("Please enter bill name",true);return}
+    addBtn.disabled=true;
+    await hubAdd("bills",{name:name,amount:parseFloat(document.getElementById("billAmt").value)||0,dueDate:document.getElementById("billDue").value||"",method:document.getElementById("billMethod").value,status:document.getElementById("billStatus").value});
+    await hubLoad("bills");toast("Bill added");render();
+  });
+  document.querySelectorAll("[data-del-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("bills",b.dataset.delBill);await hubLoad("bills");toast("Removed");render();
+    });
+  });
+  document.querySelectorAll("[data-toggle-bill]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.toggleBill});
+      if(!item)return;
+      var states=["paid","pending","overdue"];
+      var idx=states.indexOf(item.status||"pending");
+      item.status=states[(idx+1)%3];
+      hubUpdate("bills",item).then(function(){hubLoad("bills").then(function(){toast("Status: "+item.status);render()})});
+    });
+  });
+}
+
+// ───────── EMERGENCY & SAFETY LAYER VIEW ─────────
+function emergencyView(){
+  var data=hubCache["emergency"]||{items:[]};
+  var items=data.items||[];
+  // Use first item as main emergency data, rest as insurance policies
+  var main=items.find(function(i){return i.itemType==="emergency-fund"})||{};
+  var insurances=items.filter(function(i){return i.itemType==="insurance"});
+  var contacts=items.filter(function(i){return i.itemType==="contact"});
+  var backupPlan=items.find(function(i){return i.itemType==="backup-plan"})||{};
+
+  var fundAmount=parseFloat(main.amount||0);
+  var monthlyExpenses=parseFloat(main.monthlyExpenses||0);
+  var monthsCovered=monthlyExpenses>0?Math.round(fundAmount/monthlyExpenses*10)/10:0;
+  var html=hubBackBtn("Emergency & Safety");
+
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(fundAmount)+'</div><div class="ss-label">Emergency Fund</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:'+(monthsCovered>=3?"var(--green)":monthsCovered>=1?"var(--amber)":"var(--red)")+'">'+monthsCovered+'</div><div class="ss-label">Months Covered</div></div>';
+  html+='</div>';
+  if(monthsCovered<3)html+='<div style="background:var(--abg);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--amber)">&#9888; Experts recommend 3-6 months of expenses in your emergency fund.</div>';
+
+  // Emergency fund form
+  html+='<div class="ccard fi"><h3>Emergency Fund</h3>';
+  html+='<div class="form-group"><label class="form-label">Fund Amount (£)</label><input class="form-input" id="emAmount" type="number" step="0.01" value="'+(main.amount||"")+'" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Monthly Expenses (£)</label><input class="form-input" id="emExpenses" type="number" step="0.01" value="'+(main.monthlyExpenses||"")+'" placeholder="For calculating months covered"></div>';
+  html+='<button class="btn-primary" id="emSave">Save Emergency Fund</button></div>';
+
+  // Insurance policies
+  html+='<div class="ccard fi"><h3>Insurance Policies</h3>';
+  html+='<div class="form-group"><label class="form-label">Policy Name</label><input class="form-input" id="insName" placeholder="e.g. Home Insurance, Life Insurance"></div>';
+  html+='<div class="form-group"><label class="form-label">Provider</label><input class="form-input" id="insProvider" placeholder="e.g. Aviva, Admiral"></div>';
+  html+='<div class="form-group"><label class="form-label">Monthly Cost (£)</label><input class="form-input" id="insCost" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<button class="btn-primary" id="insAdd" style="margin-top:8px">Add Policy</button>';
+  if(insurances.length>0){
+    insurances.forEach(function(ins){
+      html+='<div class="item-card" style="margin-top:8px"><div class="item-top"><div><div class="item-name">'+escHtml(ins.name)+'</div><div class="item-detail">'+escHtml(ins.provider||"")+(ins.cost?' &middot; '+f(ins.cost)+'/mo':'')+'</div></div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-em="'+ins.id+'">Remove</button></div></div>';
+    });
+  }
+  html+='</div>';
+
+  // Important contacts
+  html+='<div class="ccard fi"><h3>Financial Contacts</h3>';
+  html+='<div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="conName" placeholder="e.g. Financial Advisor, Accountant"></div>';
+  html+='<div class="form-group"><label class="form-label">Phone / Details</label><input class="form-input" id="conDetails" placeholder="Phone number or details"></div>';
+  html+='<button class="btn-primary" id="conAdd" style="margin-top:8px">Add Contact</button>';
+  if(contacts.length>0){
+    contacts.forEach(function(c){
+      html+='<div class="item-card" style="margin-top:8px"><div class="item-top"><div><div class="item-name">'+escHtml(c.name)+'</div><div class="item-detail">'+escHtml(c.details||"")+'</div></div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-em="'+c.id+'">Remove</button></div></div>';
+    });
+  }
+  html+='</div>';
+
+  // Backup cash plan
+  html+='<div class="ccard fi"><h3>Backup Cash Plan</h3>';
+  html+='<div class="form-group"><label class="form-label">Your backup plan notes</label><input class="form-input" id="backupPlan" value="'+escHtml(backupPlan.notes||"")+'" placeholder="e.g. Sell investments, borrow from family, use credit line..."></div>';
+  html+='<button class="btn-primary" id="backupSave">Save Plan</button></div>';
+
+  return html;
+}
+
+function bindEmergencyEvents(){
+  var emSave=document.getElementById("emSave");
+  if(emSave)emSave.addEventListener("click",async function(){
+    emSave.disabled=true;
+    var items=(hubCache["emergency"]||{items:[]}).items;
+    var existing=items.find(function(i){return i.itemType==="emergency-fund"});
+    if(existing){
+      existing.amount=parseFloat(document.getElementById("emAmount").value)||0;
+      existing.monthlyExpenses=parseFloat(document.getElementById("emExpenses").value)||0;
+      await hubUpdate("emergency",existing);
+    }else{
+      await hubAdd("emergency",{itemType:"emergency-fund",amount:parseFloat(document.getElementById("emAmount").value)||0,monthlyExpenses:parseFloat(document.getElementById("emExpenses").value)||0});
+    }
+    await hubLoad("emergency");toast("Saved");render();
+  });
+  var insAdd=document.getElementById("insAdd");
+  if(insAdd)insAdd.addEventListener("click",async function(){
+    var name=document.getElementById("insName").value.trim();
+    if(!name){toast("Enter policy name",true);return}
+    insAdd.disabled=true;
+    await hubAdd("emergency",{itemType:"insurance",name:name,provider:document.getElementById("insProvider").value.trim(),cost:parseFloat(document.getElementById("insCost").value)||0});
+    await hubLoad("emergency");toast("Policy added");render();
+  });
+  var conAdd=document.getElementById("conAdd");
+  if(conAdd)conAdd.addEventListener("click",async function(){
+    var name=document.getElementById("conName").value.trim();
+    if(!name){toast("Enter contact name",true);return}
+    conAdd.disabled=true;
+    await hubAdd("emergency",{itemType:"contact",name:name,details:document.getElementById("conDetails").value.trim()});
+    await hubLoad("emergency");toast("Contact added");render();
+  });
+  var backupSave=document.getElementById("backupSave");
+  if(backupSave)backupSave.addEventListener("click",async function(){
+    backupSave.disabled=true;
+    var items=(hubCache["emergency"]||{items:[]}).items;
+    var existing=items.find(function(i){return i.itemType==="backup-plan"});
+    if(existing){
+      existing.notes=document.getElementById("backupPlan").value.trim();
+      await hubUpdate("emergency",existing);
+    }else{
+      await hubAdd("emergency",{itemType:"backup-plan",notes:document.getElementById("backupPlan").value.trim()});
+    }
+    await hubLoad("emergency");toast("Saved");render();
+  });
+  document.querySelectorAll("[data-del-em]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("emergency",b.dataset.delEm);await hubLoad("emergency");toast("Removed");render();
+    });
+  });
+}
+
+// ───────── FINANCIAL GOALS & PRIORITIES VIEW ─────────
+function financialGoalsView(){
+  var data=hubCache["financial-goals"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Goals & Priorities");
+
+  var GOAL_PRESETS=["Reduce Debt","Save £5,000","Invest Monthly","Cut Eating-Out Spending","Build Emergency Fund","Pay Off Credit Card","Save for Holiday","Increase Income","Reduce Subscriptions","No-Spend Challenge"];
+
+  html+='<div class="ccard fi"><h3>Add Financial Goal</h3>';
+  html+='<div class="form-group"><label class="form-label">Goal</label><select class="form-select" id="fgPreset"><option value="">Choose or type custom...</option>';
+  GOAL_PRESETS.forEach(function(g){html+='<option value="'+g+'">'+g+'</option>'});
+  html+='<option value="custom">Custom...</option></select></div>';
+  html+='<div class="form-group" id="fgCustomWrap" style="display:none"><label class="form-label">Custom Goal</label><input class="form-input" id="fgCustom" placeholder="Your goal"></div>';
+  html+='<div class="form-group"><label class="form-label">Priority</label><select class="form-select" id="fgPriority"><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Target Date (optional)</label><input class="form-input" id="fgDate" type="date"></div>';
+  html+='<div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="fgNotes" placeholder="Any details or motivation"></div>';
+  html+='<button class="btn-primary" id="fgAdd">Add Goal</button></div>';
+
+  if(items.length>0){
+    var priorities={"High":1,"Medium":2,"Low":3};
+    var sorted=items.slice().sort(function(a,b){return(priorities[a.priority]||2)-(priorities[b.priority]||2)});
+    html+='<div class="sec fi"><div class="stitle">Your Priorities</div>';
+    sorted.forEach(function(it){
+      var pColor=it.priority==="High"?"var(--red)":it.priority==="Medium"?"var(--amber)":"var(--green)";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.goal)+'</div><div class="item-detail"><span style="color:'+pColor+';font-weight:600">'+escHtml(it.priority)+' Priority</span>'+(it.targetDate?' &middot; Target: '+it.targetDate:'')+'</div>';
+      if(it.notes)html+='<div class="item-detail" style="margin-top:2px">'+escHtml(it.notes)+'</div>';
+      html+='</div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-fg="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+  return html;
+}
+
+function bindGoalsEvents(){
+  var preset=document.getElementById("fgPreset");
+  if(preset)preset.addEventListener("change",function(){
+    var cw=document.getElementById("fgCustomWrap");
+    if(cw)cw.style.display=preset.value==="custom"?"block":"none";
+  });
+  var addBtn=document.getElementById("fgAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var presetVal=document.getElementById("fgPreset").value;
+    var goal=presetVal==="custom"?(document.getElementById("fgCustom").value.trim()):presetVal;
+    if(!goal){toast("Please select or enter a goal",true);return}
+    addBtn.disabled=true;
+    await hubAdd("financial-goals",{goal:goal,priority:document.getElementById("fgPriority").value,targetDate:document.getElementById("fgDate").value||"",notes:document.getElementById("fgNotes").value.trim()});
+    await hubLoad("financial-goals");toast("Goal added");render();
+  });
+  document.querySelectorAll("[data-del-fg]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("financial-goals",b.dataset.delFg);await hubLoad("financial-goals");toast("Removed");render();
+    });
+  });
 }
 
 // ───────── INIT ─────────
