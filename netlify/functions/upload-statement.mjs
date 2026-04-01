@@ -53,12 +53,31 @@ function findColumn(headers, tests) {
   });
 }
 
-function parseExcelSheet(rows) {
-  if (!rows || rows.length < 2) throw new Error("Sheet has no data rows");
+function isHeaderRow(values) {
+  const joined = values.map((v) => String(v).toLowerCase()).join(" ");
+  return joined.includes("date") && (joined.includes("description") || joined.includes("memo") || joined.includes("narrative") || joined.includes("details") || joined.includes("transaction") || joined.includes("reference") || joined.includes("payee") || joined.includes("amount") || joined.includes("debit") || joined.includes("credit") || joined.includes("balance"));
+}
+
+function findHeaderRow(sheet) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  for (let r = range.s.r; r <= Math.min(range.e.r, 20); r++) {
+    const values = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr];
+      values.push(cell ? String(cell.v || "").trim() : "");
+    }
+    if (isHeaderRow(values)) {
+      return r;
+    }
+  }
+  return -1;
+}
+
+function parseExcelSheet(rows, headers) {
+  if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
   const accountType = detectAccountType(rows);
-  const headers = Object.keys(rows[0]).map((h) => String(h).trim());
-  const headersLower = headers.map((h) => h.toLowerCase());
 
   const dateCol = findColumn(headers, ["date"]);
   const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "transaction", "reference", "payee"]);
@@ -129,26 +148,46 @@ function parseExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const allTransactions = [];
   let accountType = "Unknown";
+  const sheetErrors = [];
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    if (rows.length < 2) continue;
+    if (!sheet["!ref"]) continue;
+
+    // Find the actual header row by scanning for recognizable column names
+    const headerRowIdx = findHeaderRow(sheet);
+
+    let rows, headers;
+    if (headerRowIdx >= 0) {
+      // Parse starting from the detected header row
+      const range = XLSX.utils.decode_range(sheet["!ref"]);
+      range.s.r = headerRowIdx;
+      const newRef = XLSX.utils.encode_range(range);
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "", range: newRef });
+    } else {
+      // Fallback: use default parsing (first row as header)
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    }
+
+    if (!rows || rows.length < 1) continue;
+
+    headers = Object.keys(rows[0]).map((h) => String(h).trim());
 
     try {
-      const result = parseExcelSheet(rows);
+      const result = parseExcelSheet(rows, headers);
       allTransactions.push(...result.transactions);
       if (result.accountType !== "Unknown") {
         accountType = result.accountType;
       }
     } catch (e) {
-      // Skip sheets that don't have valid transaction data
+      sheetErrors.push(`${sheetName}: ${e.message}`);
       continue;
     }
   }
 
   if (allTransactions.length === 0) {
-    throw new Error("No transactions found in any sheet. Please ensure your Excel file has Date and Description columns.");
+    const detail = sheetErrors.length > 0 ? " Sheet issues: " + sheetErrors.join("; ") : "";
+    throw new Error("No transactions found in any sheet. Please ensure your Excel file has columns like Date and Description (or similar headers) in each sheet." + detail);
   }
 
   return { transactions: allTransactions, accountType };
@@ -197,6 +236,7 @@ export default async (req) => {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const { transactions, accountType } = parseExcel(buffer);
+    console.log(`Parsed ${transactions.length} transactions from Excel file with account type: ${accountType}`);
 
     if (transactions.length === 0) {
       return new Response(
