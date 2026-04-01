@@ -18,7 +18,6 @@
   },
   "homepage": "https://github.com/shawnsgitt/shawnshub#readme",
   "dependencies": {
-    "@netlify/blobs": "^10.7.4",
     "xlsx": "^0.18.5"
   }
 }
