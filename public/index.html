@@ -56,8 +56,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .upload-zone .hint{font-size:11px;color:var(--dim)}
 .upload-zone input{display:none}
 
-.modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:fi .2s ease}
-.modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px max(env(safe-area-inset-bottom),24px);width:100%;max-width:540px;max-height:70vh;overflow-y:auto}
+.modal-bg{position:fixed;top:0;left:0;right:0;bottom:88px;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:fi .2s ease}
+.modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 24px;width:100%;max-width:540px;max-height:70vh;overflow-y:auto}
 .modal h3{font-size:16px;font-weight:700;margin-bottom:6px}
 .modal .modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
 .modal .cat-opt{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;cursor:pointer;transition:background .1s}
@@ -67,7 +67,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .modal-close{margin-top:16px;width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
 
 /* Batch categorization wizard */
-.batch-modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px max(env(safe-area-inset-bottom),24px);width:100%;max-width:600px;max-height:85vh;display:flex;flex-direction:column}
+.batch-modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 24px;width:100%;max-width:600px;max-height:85vh;display:flex;flex-direction:column}
 .batch-header{flex-shrink:0;margin-bottom:12px}
 .batch-header h3{font-size:18px;font-weight:700;margin-bottom:4px}
 .batch-header .batch-stats{font-size:12px;color:var(--muted)}
@@ -206,6 +206,9 @@ document.querySelectorAll(".ni").forEach(function(el){
   el.addEventListener("click",function(){
     cv=el.dataset.v;
     document.querySelectorAll(".ni").forEach(function(e){e.classList.toggle("on",e.dataset.v===cv)});
+    // Close any open modal when navigating
+    var openModal=document.querySelector(".modal-bg");
+    if(openModal){openModal.remove();recalcAnalysis();}
     destroyCharts();render();
   });
 });
@@ -221,6 +224,16 @@ function toast(msg,isErr){
 }
 
 function hasData(){return D&&D.transactions&&D.transactions.length>0}
+
+function buildAccounts(){
+  if(!D||!D.transactions)return;
+  D.accounts={};
+  D.transactions.forEach(function(t){
+    var acct=t.account||"Account";
+    if(!D.accounts[acct])D.accounts[acct]=[];
+    D.accounts[acct].push(t);
+  });
+}
 
 function accounts(){
   if(!D||!D.accounts)return[];
@@ -443,6 +456,7 @@ async function doUpload(file){
     var data=await r.json();
     if(!r.ok)throw new Error(data.error||"Upload failed");
     D=data;
+    buildAccounts();
     toast(data.transactions.length+" transactions analyzed");
     render();
     // If uncategorized exist, prompt immediately
@@ -575,7 +589,15 @@ function smartSuggest(desc,txns){
     var allSame=amounts.every(function(a){return Math.abs(a-amounts[0])<0.1});
     if(allSame&&amounts[0]<100) return "Subscriptions";
   }
-  return null;
+  // Fallback: suggest based on amount size and transaction count
+  if(txns&&txns.length>0){
+    var avgAmt=txns.reduce(function(s,t){return s+t.absAmount},0)/txns.length;
+    if(avgAmt<15) return "Eating Out";
+    if(avgAmt<50) return "Shopping";
+    if(avgAmt<150) return "Bills & Utilities";
+    return "Bills & Utilities";
+  }
+  return "Shopping";
 }
 
 // Helper: determine transaction type from category
@@ -851,6 +873,7 @@ function bindBatchEvents(bg){
 
 function recalcAnalysis(){
   if(!D||!D.transactions)return;
+  buildAccounts();
   var txns=D.transactions;
   var totalIncome=0,totalExpenses=0,totalSavings=0;
   txns.forEach(function(t){
