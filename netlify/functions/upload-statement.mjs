@@ -348,7 +348,7 @@ function parseExcelSheet(rows, headers, learnedMappings) {
 
     const balance = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
 
-    rawEntries.push({ index: i, date, description, amount, balance });
+    rawEntries.push({ index: i, date, description, amount, balance, account: null });
   }
 
   // For single amount column, detect if sign convention is inverted
@@ -392,6 +392,7 @@ function parseExcelSheet(rows, headers, learnedMappings) {
       balance: entry.balance,
       category,
       type,
+      account: "",
     });
   }
 
@@ -467,6 +468,8 @@ async function parseExcel(buffer) {
 
     try {
       const result = parseExcelSheet(rows, headers, learnedMappings);
+      // Tag each transaction with the sheet name as the account
+      result.transactions.forEach(t => { t.account = sheetName; });
       allTransactions.push(...result.transactions);
     } catch (e) {
       sheetErrors.push(`${sheetName}: ${e.message}`);
