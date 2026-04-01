@@ -186,8 +186,8 @@ function uploadView(){
   '<div class="upload-zone fi" id="dropZone">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'+
     '<p>Tap to upload or drag your bank statement</p>'+
-    '<div class="hint">CSV and PDF files supported</div>'+
-    '<input type="file" id="fileInput" accept=".csv,.pdf">'+
+    '<div class="hint">Excel files (.xlsx, .xls) supported</div>'+
+    '<input type="file" id="fileInput" accept=".xlsx,.xls">'+
   '</div>'+
   '<div class="label-input fi">'+
     '<select id="acctLabel"><option value="">Auto-detect account type</option><option value="Current Account">Current Account</option><option value="Savings Account">Savings Account</option><option value="Credit Card">Credit Card</option><option value="custom">Custom name...</option></select>'+
@@ -197,7 +197,7 @@ function uploadView(){
     var txns=D.accounts[a];
     var n=txns.length;
     return'<div class="row"><div class="dot" style="background:var(--purple)"></div><div style="flex:1"><div class="rname">'+a+'</div><div style="font-size:11px;color:var(--dim)">'+n+' transaction'+(n!==1?'s':'')+'</div></div><button class="clear-btn" data-clear="'+a+'" style="font-size:10px;padding:5px 10px">Remove</button></div>';
-  }).join("")+'</div>':'<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No statements yet</h2><p>Upload your bank statement CSV or PDF to get started. The system will auto-detect your account type and categorize your transactions.</p></div>');
+  }).join("")+'</div>':'<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No statements yet</h2><p>Upload your bank statement Excel file (.xlsx or .xls) to get started. The system will read through each sheet, auto-detect your account type, and categorize your transactions.</p></div>');
 }
 
 function bindUpload(){
@@ -239,7 +239,7 @@ function bindUpload(){
 
 async function doUpload(file){
   var ext=file.name.toLowerCase().split('.').pop();
-  if(ext!=="csv"&&ext!=="pdf"){toast("Please upload a CSV or PDF file",true);return}
+  if(ext!=="xlsx"&&ext!=="xls"){toast("Please upload an Excel file (.xlsx or .xls)",true);return}
   var sel=document.getElementById("acctLabel");
   var custom=document.getElementById("customLabel");
   var label=sel.value==="custom"?custom.value:sel.value;
@@ -422,7 +422,7 @@ function hasData(){return D&&Object.keys(D.accounts||{}).length>0&&allTxns().len
 
 function emptyState(){
   return'<div class="head fi"><h1>Finance Hub</h1></div>'+
-  '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No data yet</h2><p>Go to the Upload tab and upload a bank statement CSV or PDF to see your financial analysis here.</p></div>';
+  '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No data yet</h2><p>Go to the Upload tab and upload a bank statement Excel file to see your financial analysis here.</p></div>';
 }
 
 // ───────── CHARTS ─────────

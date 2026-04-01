@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { PDFParse } from "pdf-parse";
+import * as XLSX from "xlsx";
 
 // Category keywords for auto-categorization
 const CATEGORY_RULES = [
@@ -30,121 +30,94 @@ function categorize(description) {
   return "Uncategorized";
 }
 
-function detectAccountType(lines) {
-  const joined = lines.slice(0, 10).join(" ").toLowerCase();
-  if (joined.includes("saving")) return "Savings";
-  if (joined.includes("current") || joined.includes("checking")) return "Current";
-  if (joined.includes("credit card") || joined.includes("credit")) return "Credit Card";
+function detectAccountType(rows) {
+  const sample = rows.slice(0, 10).map((r) => Object.values(r).join(" ")).join(" ").toLowerCase();
+  if (sample.includes("saving")) return "Savings";
+  if (sample.includes("current") || sample.includes("checking")) return "Current";
+  if (sample.includes("credit card") || sample.includes("credit")) return "Credit Card";
   return "Unknown";
 }
 
-function splitCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
-
-function parseAmount(str) {
-  if (!str) return 0;
-  const cleaned = str.replace(/[£$€,\s]/g, "").trim();
+function parseAmount(val) {
+  if (val == null) return 0;
+  if (typeof val === "number") return val;
+  const cleaned = String(val).replace(/[£$€,\s]/g, "").trim();
   if (!cleaned) return 0;
   return parseFloat(cleaned) || 0;
 }
 
-function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) throw new Error("File has no data rows");
+function findColumn(headers, tests) {
+  return headers.findIndex((h) => {
+    const lower = h.toLowerCase();
+    return tests.some((t) => lower.includes(t));
+  });
+}
 
-  const accountType = detectAccountType(lines);
+function isHeaderRow(values) {
+  const joined = values.map((v) => String(v).toLowerCase()).join(" ");
+  return joined.includes("date") && (joined.includes("description") || joined.includes("memo") || joined.includes("narrative") || joined.includes("details") || joined.includes("transaction") || joined.includes("reference") || joined.includes("payee") || joined.includes("amount") || joined.includes("debit") || joined.includes("credit") || joined.includes("balance"));
+}
 
-  let headerIdx = -1;
-  let headers = [];
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
-    const cols = splitCSVLine(lines[i]);
-    const lower = cols.map((c) => c.toLowerCase().trim());
-    if (
-      lower.some((h) => h.includes("date")) &&
-      lower.some(
-        (h) =>
-          h.includes("description") ||
-          h.includes("memo") ||
-          h.includes("narrative") ||
-          h.includes("details") ||
-          h.includes("transaction") ||
-          h.includes("reference") ||
-          h.includes("payee")
-      )
-    ) {
-      headerIdx = i;
-      headers = lower;
-      break;
+function findHeaderRow(sheet) {
+  const range = XLSX.utils.decode_range(sheet["!ref"] || "A1");
+  for (let r = range.s.r; r <= Math.min(range.e.r, 20); r++) {
+    const values = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr];
+      values.push(cell ? String(cell.v || "").trim() : "");
+    }
+    if (isHeaderRow(values)) {
+      return r;
     }
   }
+  return -1;
+}
 
-  if (headerIdx === -1) {
-    headerIdx = 0;
-    headers = splitCSVLine(lines[0]).map((c) => c.toLowerCase().trim());
-  }
+function parseExcelSheet(rows, headers) {
+  if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
-  const dateCol = headers.findIndex((h) => h.includes("date"));
-  const descCol = headers.findIndex(
-    (h) =>
-      h.includes("description") ||
-      h.includes("memo") ||
-      h.includes("narrative") ||
-      h.includes("details") ||
-      h.includes("transaction") ||
-      h.includes("reference") ||
-      h.includes("payee")
-  );
-  const amountCol = headers.findIndex(
-    (h) => h === "amount" || h.includes("amount") || h === "value"
-  );
-  const debitCol = headers.findIndex(
-    (h) => h.includes("debit") || h.includes("money out") || h.includes("paid out")
-  );
-  const creditCol = headers.findIndex(
-    (h) => h.includes("credit") || h.includes("money in") || h.includes("paid in")
-  );
-  const balanceCol = headers.findIndex((h) => h.includes("balance"));
+  const accountType = detectAccountType(rows);
+
+  const dateCol = findColumn(headers, ["date"]);
+  const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "transaction", "reference", "payee"]);
+  const amountCol = findColumn(headers, ["amount", "value"]);
+  const debitCol = findColumn(headers, ["debit", "money out", "paid out"]);
+  const creditCol = findColumn(headers, ["credit", "money in", "paid in"]);
+  const balanceCol = findColumn(headers, ["balance"]);
 
   if (dateCol === -1) {
-    throw new Error("Could not find a Date column. Please ensure your CSV has a Date header.");
+    throw new Error("Could not find a Date column. Please ensure your Excel file has a Date header.");
   }
 
   const transactions = [];
 
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = splitCSVLine(lines[i]);
-    if (cols.length < 2) continue;
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const values = headers.map((h) => row[h]);
 
-    const date = cols[dateCol]?.trim();
-    const description = cols[descCol >= 0 ? descCol : 1]?.trim();
+    const rawDate = values[dateCol];
+    let date = "";
+    if (rawDate instanceof Date) {
+      const d = rawDate;
+      date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+    } else if (rawDate != null) {
+      date = String(rawDate).trim();
+    }
+
+    const description = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
     if (!date || !description) continue;
 
     let amount = 0;
     if (amountCol >= 0) {
-      amount = parseAmount(cols[amountCol]);
+      amount = parseAmount(values[amountCol]);
     } else if (debitCol >= 0 || creditCol >= 0) {
-      const debit = debitCol >= 0 ? parseAmount(cols[debitCol]) : 0;
-      const credit = creditCol >= 0 ? parseAmount(cols[creditCol]) : 0;
+      const debit = debitCol >= 0 ? parseAmount(values[debitCol]) : 0;
+      const credit = creditCol >= 0 ? parseAmount(values[creditCol]) : 0;
       amount = credit > 0 ? credit : -Math.abs(debit);
     }
 
-    const balance = balanceCol >= 0 ? parseAmount(cols[balanceCol]) : null;
+    const balance = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
     const category = categorize(description);
     const type =
       category === "Income"
@@ -171,106 +144,53 @@ function parseCSV(text) {
   return { transactions, accountType };
 }
 
-async function parsePDF(buffer) {
-  const parser = new PDFParse({ data: buffer });
-  const result = await parser.getText();
-  const text = result.text;
-  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+function parseExcel(buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+  const allTransactions = [];
+  let accountType = "Unknown";
+  const sheetErrors = [];
 
-  const accountType = detectAccountType(lines);
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet["!ref"]) continue;
 
-  const datePatterns = [
-    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
-    /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
-    /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/i,
-  ];
+    // Find the actual header row by scanning for recognizable column names
+    const headerRowIdx = findHeaderRow(sheet);
 
-  const amountPattern = /[£$€]?\s*-?\d{1,3}(?:,\d{3})*(?:\.\d{2})\b/g;
+    let rows, headers;
+    if (headerRowIdx >= 0) {
+      // Parse starting from the detected header row
+      const range = XLSX.utils.decode_range(sheet["!ref"]);
+      range.s.r = headerRowIdx;
+      const newRef = XLSX.utils.encode_range(range);
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "", range: newRef });
+    } else {
+      // Fallback: use default parsing (first row as header)
+      rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    }
 
-  const transactions = [];
-  let lineIndex = 0;
+    if (!rows || rows.length < 1) continue;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    headers = Object.keys(rows[0]).map((h) => String(h).trim());
 
-    let dateMatch = null;
-    for (const dp of datePatterns) {
-      const m = line.match(dp);
-      if (m && line.indexOf(m[1]) < 20) {
-        dateMatch = m[1];
-        break;
+    try {
+      const result = parseExcelSheet(rows, headers);
+      allTransactions.push(...result.transactions);
+      if (result.accountType !== "Unknown") {
+        accountType = result.accountType;
       }
+    } catch (e) {
+      sheetErrors.push(`${sheetName}: ${e.message}`);
+      continue;
     }
-    if (!dateMatch) continue;
-
-    let fullText = line;
-    if (i + 1 < lines.length) {
-      const nextLine = lines[i + 1];
-      let hasDate = false;
-      for (const dp of datePatterns) {
-        const nm = nextLine.match(dp);
-        if (nm && nextLine.indexOf(nm[1]) < 20) {
-          hasDate = true;
-          break;
-        }
-      }
-      if (!hasDate) {
-        fullText += " " + nextLine;
-      }
-    }
-
-    const amounts = fullText.match(amountPattern);
-    if (!amounts || amounts.length === 0) continue;
-
-    const dateEnd = fullText.indexOf(dateMatch) + dateMatch.length;
-    const firstAmtIdx = fullText.indexOf(amounts[0]);
-    let description = fullText.substring(dateEnd, firstAmtIdx).trim();
-    description = description.replace(/^[\s,\-|]+/, "").replace(/[\s,\-|]+$/, "").trim();
-    if (!description || description.length < 2) {
-      description = fullText.substring(dateEnd).replace(/[£$€\d,.\-\s]+$/, "").trim();
-    }
-    if (!description || description.length < 2) continue;
-
-    let amount = parseAmount(amounts[0]);
-    let balance = null;
-    if (amounts.length >= 3) {
-      const debit = parseAmount(amounts[0]);
-      const credit = parseAmount(amounts[1]);
-      balance = parseAmount(amounts[amounts.length - 1]);
-      amount = credit > 0 ? credit : -Math.abs(debit);
-    } else if (amounts.length === 2) {
-      amount = parseAmount(amounts[0]);
-      balance = parseAmount(amounts[1]);
-    }
-
-    if (amount === 0) continue;
-
-    const category = categorize(description);
-    const type =
-      category === "Income"
-        ? "Income"
-        : category === "Savings"
-          ? "Savings"
-          : amount > 0
-            ? "Income"
-            : "Expense";
-
-    lineIndex++;
-    transactions.push({
-      id: `txn_${Date.now()}_${lineIndex}`,
-      date: dateMatch,
-      description,
-      amount,
-      absAmount: Math.abs(amount),
-      balance,
-      category,
-      type,
-      manualCategory: false,
-    });
   }
 
-  await parser.destroy();
-  return { transactions, accountType };
+  if (allTransactions.length === 0) {
+    const detail = sheetErrors.length > 0 ? " Sheet issues: " + sheetErrors.join("; ") : "";
+    throw new Error("No transactions found in any sheet. Please ensure your Excel file has columns like Date and Description (or similar headers) in each sheet." + detail);
+  }
+
+  return { transactions: allTransactions, accountType };
 }
 
 function summarizeCategories(transactions) {
@@ -302,17 +222,21 @@ export default async (req) => {
     }
 
     const fileName = (file.name || "").toLowerCase();
-    const isPDF = fileName.endsWith(".pdf") || file.type === "application/pdf";
+    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls") ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel";
 
-    let transactions, accountType;
-    if (isPDF) {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      ({ transactions, accountType } = await parsePDF(buffer));
-    } else {
-      const text = await file.text();
-      ({ transactions, accountType } = parseCSV(text));
+    if (!isExcel) {
+      return new Response(
+        JSON.stringify({ error: "Only Excel files (.xlsx, .xls) are supported. Please upload an Excel document." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const { transactions, accountType } = parseExcel(buffer);
+    console.log(`Parsed ${transactions.length} transactions from Excel file with account type: ${accountType}`);
 
     if (transactions.length === 0) {
       return new Response(
