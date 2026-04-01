@@ -77,7 +77,16 @@ function categorize(description, learnedMappings) {
 
   const lower = (description || "").toLowerCase();
 
-  // Check keyword rules first (highest confidence)
+  // Check learned mappings first (user-trained categories — highest confidence)
+  if (learnedMappings && learnedMappings.mappings) {
+    const normalized = normalizeForLearning(description);
+    const learned = learnedMappings.mappings[normalized];
+    if (learned && learned.category && learned.count >= 1) {
+      return learned.category;
+    }
+  }
+
+  // Check keyword rules (high confidence)
   for (const rule of CATEGORY_RULES) {
     for (const keyword of rule.keywords) {
       if (lower.includes(keyword)) {
@@ -86,13 +95,10 @@ function categorize(description, learnedMappings) {
     }
   }
 
-  // Check learned mappings (user-trained categories)
-  if (learnedMappings && learnedMappings.mappings) {
-    const normalized = normalizeForLearning(description);
-    const learned = learnedMappings.mappings[normalized];
-    if (learned && learned.category && learned.count >= 1) {
-      return learned.category;
-    }
+  // Smart suggestion — pattern-based heuristic categorization
+  const suggested = suggestCategory(description);
+  if (suggested) {
+    return suggested;
   }
 
   return "Uncategorized";
@@ -113,13 +119,96 @@ function findColumn(headers, tests) {
   });
 }
 
-// Smart suggestion: guess a likely category from description even if no keyword matches
+// Smart suggestion: guess a likely category from description using pattern analysis
 function suggestCategory(description) {
   const lower = (description || "").toLowerCase();
-  // Patterns that hint at common categories
-  if (/\b(pay|pymt|payment|eft|debit order)\b/i.test(lower) && /\b(rent|landlord|property|estate)\b/i.test(lower)) return "Bills & Utilities";
-  if (/\b(transfer|trfr?|eft|zelle|venmo|cashapp)\b/i.test(lower) && !/\b(saving|invest)\b/i.test(lower)) return null; // could be anything
-  if (/pos\b|point of sale|card purchase|purchase/i.test(lower)) return null; // too generic
+
+  // ── Balance / Non-transactional ──
+  if (/\b(balance carried|balance brought|balance c\/f|balance b\/f|opening balance|closing balance|carried forward|brought forward)\b/.test(lower)) return "Balance Carried Forward";
+  if (/\b(transfer between|inter account|interaccount|internal transfer|own account|between accounts|acc transfer|self transfer|same name transfer|sweep|move money|move funds)\b/.test(lower)) return "Cash Transfer";
+
+  // ── Cash In / Deposits ──
+  if (/\b(cash deposit|cash in|cash payment in|counter deposit|counter credit|branch deposit|cash at branch|cash lodgement|lodgement)\b/.test(lower)) return "Cash In";
+
+  // ── Cash Withdrawal ──
+  if (/\b(atm|cash withdrawal|withdraw|cash send|cardless|cash back at)\b/.test(lower)) return "Cash Withdrawal";
+
+  // ── Income patterns ──
+  if (/\b(salary|wages?|payroll|pay\s+from|income|commission|bonus|stipend|bursary|grant|payout|pension|benefit|annuity)\b/.test(lower)) return "Income";
+  if (/\b(refund|reversal|cashback|reimburse|rebate|credit note|returned|money back)\b/.test(lower)) return "Income";
+  if (/\b(sars|hmrc|tax refund|tax return|tax credit|dividend|interest earned|interest received|investment return)\b/.test(lower)) return "Income";
+  if (/\b(freelance|invoice paid?|payment received|deposit from|credit received|reward)\b/.test(lower)) return "Income";
+
+  // ── Bills & Utilities — very common, catch broadly ──
+  if (/\b(rent|landlord|property|estate agent|letting|tenant|lease)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(electric|electricity|gas\s|water|sewage|council|rates|levy|municipal|waste|refuse)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(insurance|insure|cover|policy|premium|assurance|old mutual|sanlam|liberty|discovery|hollard|outsurance|momentum|1st for women|santam|miway|auto & general|budget ins)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(vodafone|mtn|vodacom|cell\s?c|ee\b|o2\b|giffgaff|three\b|telkom|airtel|rain\b|afrihost|fibre|broadband|internet|wifi|dstv|multichoice|gotv)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(mortgage|bond repayment|home loan|strata|body corporate|property management|maintenance fee|service charge)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(tv licence|license fee|tv license)\b/.test(lower)) return "Bills & Utilities";
+  if (/\b(debit order|d\/o|do\s+|direct debit|recurring payment|standing order)\b/.test(lower) && !/\b(gym|fitness|netflix|spotify|amazon|disney)\b/.test(lower)) return "Bills & Utilities";
+
+  // ── Transport ──
+  if (/\b(uber|bolt|lyft|taxi|cab|ride|didi|indriver)\b/.test(lower) && !/\b(eats|eat|food|delivery)\b/.test(lower)) return "Transport";
+  if (/\b(fuel|petrol|diesel|garage|shell|bp\b|caltex|engen|sasol|esso|texaco|total\s+garage|filling station|gas station|service station)\b/.test(lower)) return "Transport";
+  if (/\b(parking|park\s|ncp|q-park|easy park|paypoint|justpark|ring-?go)\b/.test(lower)) return "Transport";
+  if (/\b(tfl|oyster|bus\b|train|rail|metro|tube|underground|gautrain|rea vaya|myciti|golden arrow)\b/.test(lower)) return "Transport";
+  if (/\b(toll|e-?toll|dart charge|congestion|road\s+tax|vehicle|mot\s+test|car\s+service|tyre|tire|mechanic|auto\s+repair|car\s+wash)\b/.test(lower)) return "Transport";
+
+  // ── Eating Out ──
+  if (/\b(restaurant|cafe|coffee|bistro|brasserie|diner|eatery|canteen|food\s+court|kitchen)\b/.test(lower)) return "Eating Out";
+  if (/\b(takeaway|take\s+away|delivery|uber\s*eats|deliveroo|just\s*eat|mr\s*delivery|door\s*dash|grub\s*hub|postmates|food\s+delivery|order\s+food)\b/.test(lower)) return "Eating Out";
+  if (/\b(pizza|burger|chicken|sushi|ramen|kebab|curry|noodle|wings|grill|steakhouse|bbq|barbecue)\b/.test(lower)) return "Eating Out";
+  if (/\b(bar\b|pub\b|tavern|lounge|cocktail|wine\s+bar|brewery|taproom|beer)\b/.test(lower)) return "Eating Out";
+
+  // ── Groceries ──
+  if (/\b(grocery|grocer|supermarket|fresh\s+market|food\s+market|butcher|bakery|greengrocer|fruit|veg|organic|farm\s+stall|deli)\b/.test(lower)) return "Groceries";
+
+  // ── Shopping ──
+  if (/\b(shop|store|mart|retail|buy|purchase|outlet|boutique|mall|plaza|centre|center)\b/.test(lower) && !/\b(coffee|food|eat|restaurant|grocery|body\s+shop)\b/.test(lower)) return "Shopping";
+  if (/\b(online|click|e-?commerce|order|parcel|dispatch|shipped)\b/.test(lower) && !/\b(food|eat|delivery|uber|just\s*eat)\b/.test(lower)) return "Shopping";
+  if (/\b(clothing|fashion|shoes|sneakers|apparel|wear|outfit|accessories|jewel|watch)\b/.test(lower)) return "Shopping";
+  if (/\b(furniture|decor|home\s+goods|hardware|tools|diy|garden|appliance)\b/.test(lower)) return "Shopping";
+
+  // ── Subscriptions ──
+  if (/\b(subscri|member|renewal|recurring|monthly\s+fee|annual\s+fee|premium\s+plan|pro\s+plan)\b/.test(lower)) return "Subscriptions";
+  if (/\b(netflix|spotify|disney|youtube|apple\s+music|hulu|hbo|amazon\s+prime|audible|adobe|microsoft|icloud|google\s+one|playstation|xbox|crunchyroll|patreon|chatgpt|openai|canva|notion|dropbox|github|linkedin|deezer|tidal|showmax|dstv)\b/.test(lower)) return "Subscriptions";
+
+  // ── Health & Fitness ──
+  if (/\b(gym|fitness|sport|active|exercise|workout|yoga|pilates|crossfit|martial)\b/.test(lower)) return "Health & Fitness";
+  if (/\b(pharmacy|chemist|medical|doctor|dr\s|clinic|hospital|dental|dentist|optom|optician|physio|therapist|counsell|psychology|chiropract|pathology|radiology|x-?ray|scan|lab|blood\s+test)\b/.test(lower)) return "Health & Fitness";
+  if (/\b(vitamin|supplement|protein|health\s+food|wellness|remedy|medicine|prescription|dispens)\b/.test(lower)) return "Health & Fitness";
+  if (/\b(medical\s+aid|health\s+insurance|bupa|vitality|discovery\s+health|bonitas|gems|medshield)\b/.test(lower)) return "Health & Fitness";
+
+  // ── Entertainment ──
+  if (/\b(cinema|movie|theatre|theater|concert|ticket|event|show|performance|gallery|museum|zoo|aquarium|theme\s+park|amusement|funfair|arcade|bowling|escape\s+room|comedy|festival|laser|mini\s+golf)\b/.test(lower)) return "Entertainment";
+  if (/\b(gaming|steam|playstation\s+store|nintendo|xbox\s+store|epic\s+games|riot|twitch|gaming)\b/.test(lower)) return "Entertainment";
+
+  // ── Education ──
+  if (/\b(school|university|college|tuition|course|academy|training|workshop|seminar|exam|certification|study|learning|lecture|textbook|stationery|education|student|tutorial|bootcamp)\b/.test(lower)) return "Education";
+  if (/\b(udemy|coursera|skillshare|book|kindle|library|academic|research)\b/.test(lower)) return "Education";
+
+  // ── Personal Care ──
+  if (/\b(salon|barber|hairdresser|hair|beauty|nail|spa|wax|facial|massage|grooming|cosmetic|makeup|skincare|perfume|fragrance|aesthetic|dermatol|laser\s+treatment)\b/.test(lower)) return "Personal Care";
+
+  // ── Savings ──
+  if (/\b(sav(e|ing)|invest|isa\b|premium\s+bond|unit\s+trust|money\s+market|fixed\s+deposit|notice\s+deposit|etf|index\s+fund|retirement|provident|pension\s+fund|annuity\s+contrib)\b/.test(lower)) return "Savings";
+
+  // ── Family Support ──
+  if (/\b(transfer|trfr|eft|send|remit|allowance|pocket\s+money|support|maintenance)\b/.test(lower) && /\b(to\s|family|child|parent|mother|father|wife|husband|spouse|brother|sister|son|daughter|gift|church|charity|donat|tithe|offering|zakat|mosque|temple)\b/.test(lower)) return "Family Support";
+  if (/\b(church|charity|donat|tithe|offering|zakat|ngo|foundation|fundrais|sponsor)\b/.test(lower)) return "Family Support";
+
+  // ── Bank Fees ──
+  if (/\b(fee|charge|admin|penalty|interest\s+charge|overdraft|insufficient|nsf|rejected|unpaid|bounce|ledger\s+fee|service\s+fee|transaction\s+fee|card\s+fee|annual\s+card|account\s+fee|monthly\s+fee|eft\s+fee|debit\s+order\s+fee|notification\s+fee|sms\s+fee|excess\s+fee)\b/.test(lower)) return "Bank Fees";
+
+  // ── Fallback patterns based on transaction structure ──
+  // POS / card purchases are likely shopping or groceries
+  if (/\b(pos|point\s+of\s+sale|card\s+purchase|purchase|buy)\b/.test(lower)) return "Shopping";
+  // Generic payments — if "pay" with no other context, likely bills
+  if (/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
+  // Transfers without clear destination — family support as best guess
+  if (/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Family Support";
+
   return null;
 }
 
