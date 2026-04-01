@@ -1,9 +1,5 @@
 import { getStore } from "@netlify/blobs";
 import { PDFParse } from "pdf-parse";
-import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-
-// Pre-load the PDF.js worker to avoid dynamic import issues in serverless environments
-globalThis.pdfjsWorker = pdfjsWorker;
 
 // Category keywords for auto-categorization
 const CATEGORY_RULES = [
@@ -34,7 +30,6 @@ function categorize(description) {
   return "Uncategorized";
 }
 
-// Detect account type from content
 function detectAccountType(lines) {
   const joined = lines.slice(0, 10).join(" ").toLowerCase();
   if (joined.includes("saving")) return "Savings";
@@ -43,14 +38,38 @@ function detectAccountType(lines) {
   return "Unknown";
 }
 
-// Parse CSV lines into transactions
+function splitCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseAmount(str) {
+  if (!str) return 0;
+  const cleaned = str.replace(/[£$€,\s]/g, "").trim();
+  if (!cleaned) return 0;
+  return parseFloat(cleaned) || 0;
+}
+
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) throw new Error("File has no data rows");
 
   const accountType = detectAccountType(lines);
 
-  // Find the header row (first row with recognizable column names)
   let headerIdx = -1;
   let headers = [];
   for (let i = 0; i < Math.min(lines.length, 10); i++) {
@@ -75,13 +94,11 @@ function parseCSV(text) {
     }
   }
 
-  // Fallback: try to detect by column count
   if (headerIdx === -1) {
     headerIdx = 0;
     headers = splitCSVLine(lines[0]).map((c) => c.toLowerCase().trim());
   }
 
-  // Map columns
   const dateCol = headers.findIndex((h) => h.includes("date"));
   const descCol = headers.findIndex(
     (h) =>
@@ -104,8 +121,9 @@ function parseCSV(text) {
   );
   const balanceCol = headers.findIndex((h) => h.includes("balance"));
 
-  if (dateCol === -1)
+  if (dateCol === -1) {
     throw new Error("Could not find a Date column. Please ensure your CSV has a Date header.");
+  }
 
   const transactions = [];
 
@@ -153,33 +171,6 @@ function parseCSV(text) {
   return { transactions, accountType };
 }
 
-function splitCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
-
-function parseAmount(str) {
-  if (!str) return 0;
-  const cleaned = str.replace(/[£$€,\s]/g, "").trim();
-  if (!cleaned) return 0;
-  return parseFloat(cleaned) || 0;
-}
-
-// Parse PDF bank statement into transactions
 async function parsePDF(buffer) {
   const parser = new PDFParse({ data: buffer });
   const result = await parser.getText();
@@ -188,14 +179,12 @@ async function parsePDF(buffer) {
 
   const accountType = detectAccountType(lines);
 
-  // Common date patterns: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, DD Mon YYYY, etc.
   const datePatterns = [
     /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/,
     /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/,
     /(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})/i,
   ];
 
-  // Amount pattern: optional currency symbol, digits with optional commas, decimal, digits
   const amountPattern = /[£$€]?\s*-?\d{1,3}(?:,\d{3})*(?:\.\d{2})\b/g;
 
   const transactions = [];
@@ -204,7 +193,6 @@ async function parsePDF(buffer) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Try to find a date at the start of the line
     let dateMatch = null;
     for (const dp of datePatterns) {
       const m = line.match(dp);
@@ -215,15 +203,13 @@ async function parsePDF(buffer) {
     }
     if (!dateMatch) continue;
 
-    // Extract amounts from the line (and possibly next line for multi-line entries)
     let fullText = line;
-    // Some PDF statements wrap description to next line
-    if (i + 1 < lines.length && !lines[i + 1].match(datePatterns[0]) && !lines[i + 1].match(datePatterns[1])) {
+    if (i + 1 < lines.length) {
       const nextLine = lines[i + 1];
-      // Only join if next line doesn't start with a date
       let hasDate = false;
       for (const dp of datePatterns) {
-        if (nextLine.match(dp) && nextLine.indexOf(nextLine.match(dp)?.[1]) < 20) {
+        const nm = nextLine.match(dp);
+        if (nm && nextLine.indexOf(nm[1]) < 20) {
           hasDate = true;
           break;
         }
@@ -236,36 +222,27 @@ async function parsePDF(buffer) {
     const amounts = fullText.match(amountPattern);
     if (!amounts || amounts.length === 0) continue;
 
-    // Extract description: text between date and first amount
     const dateEnd = fullText.indexOf(dateMatch) + dateMatch.length;
     const firstAmtIdx = fullText.indexOf(amounts[0]);
     let description = fullText.substring(dateEnd, firstAmtIdx).trim();
-    // Clean up description
     description = description.replace(/^[\s,\-|]+/, "").replace(/[\s,\-|]+$/, "").trim();
     if (!description || description.length < 2) {
-      // Try to use text after date up to numbers
       description = fullText.substring(dateEnd).replace(/[£$€\d,.\-\s]+$/, "").trim();
     }
     if (!description || description.length < 2) continue;
 
-    // Parse amount - use last amount as balance if multiple, first as transaction amount
     let amount = parseAmount(amounts[0]);
     let balance = null;
-    if (amounts.length >= 2) {
-      // If there are debit and credit columns, or amount and balance
-      if (amounts.length >= 3) {
-        // Likely: debit, credit, balance
-        const debit = parseAmount(amounts[0]);
-        const credit = parseAmount(amounts[1]);
-        balance = parseAmount(amounts[amounts.length - 1]);
-        amount = credit > 0 ? credit : -Math.abs(debit);
-      } else {
-        amount = parseAmount(amounts[0]);
-        balance = parseAmount(amounts[amounts.length - 1]);
-      }
+    if (amounts.length >= 3) {
+      const debit = parseAmount(amounts[0]);
+      const credit = parseAmount(amounts[1]);
+      balance = parseAmount(amounts[amounts.length - 1]);
+      amount = credit > 0 ? credit : -Math.abs(debit);
+    } else if (amounts.length === 2) {
+      amount = parseAmount(amounts[0]);
+      balance = parseAmount(amounts[1]);
     }
 
-    // If amount is 0, skip
     if (amount === 0) continue;
 
     const category = categorize(description);
@@ -296,6 +273,14 @@ async function parsePDF(buffer) {
   return { transactions, accountType };
 }
 
+function summarizeCategories(transactions) {
+  const cats = {};
+  for (const t of transactions) {
+    cats[t.category] = (cats[t.category] || 0) + 1;
+  }
+  return cats;
+}
+
 export default async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "POST required" }), {
@@ -321,7 +306,8 @@ export default async (req) => {
 
     let transactions, accountType;
     if (isPDF) {
-      const buffer = Buffer.from(await file.arrayBuffer());
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
       ({ transactions, accountType } = await parsePDF(buffer));
     } else {
       const text = await file.text();
@@ -330,24 +316,20 @@ export default async (req) => {
 
     if (transactions.length === 0) {
       return new Response(
-        JSON.stringify({ error: "No transactions found in file" }),
+        JSON.stringify({ error: "No transactions found in file. Please check the file format." }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // Store in Netlify Blobs
     const store = getStore({ name: "finance-data", consistency: "strong" });
 
-    // Get existing data
     const existing = (await store.get("transactions", { type: "json" })) || { accounts: {} };
 
-    // Use detected or user-provided account label
     const label = accountLabel || `${accountType} Account`;
     if (!existing.accounts[label]) {
       existing.accounts[label] = [];
     }
 
-    // Merge transactions, avoid duplicates by date+description+amount
     const existingSet = new Set(
       existing.accounts[label].map(
         (t) => `${t.date}|${t.description}|${t.amount}`
@@ -385,14 +367,6 @@ export default async (req) => {
     });
   }
 };
-
-function summarizeCategories(transactions) {
-  const cats = {};
-  for (const t of transactions) {
-    cats[t.category] = (cats[t.category] || 0) + 1;
-  }
-  return cats;
-}
 
 export const config = {
   path: "/api/upload",

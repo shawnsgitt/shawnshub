@@ -18,6 +18,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Ro
 .head h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
 .live{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes sp{to{transform:rotate(360deg)}}
 .kgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
 .k{border-radius:14px;padding:14px 16px;border:1px solid var(--border)}
 .k .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
@@ -47,7 +48,6 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .fi{animation:fi .35s ease both;opacity:0}
 @keyframes fi{to{opacity:1}}
 
-/* Upload zone */
 .upload-zone{border:2px dashed var(--border);border-radius:16px;padding:32px 20px;text-align:center;transition:border-color .2s,background .2s;cursor:pointer;margin-bottom:16px}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--purple);background:var(--pbg)}
 .upload-zone svg{width:40px;height:40px;color:var(--dim);margin-bottom:10px}
@@ -55,13 +55,11 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .upload-zone .hint{font-size:11px;color:var(--dim)}
 .upload-zone input{display:none}
 
-/* Account selector */
 .acct-select{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .acct-btn{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
 .acct-btn.on{background:var(--purple);color:white;border-color:var(--purple)}
 .acct-btn:active{transform:scale(.97)}
 
-/* Modal */
 .modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:flex-end;justify-content:center;animation:fi .2s ease}
 .modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px max(env(safe-area-inset-bottom),24px);width:100%;max-width:540px;max-height:70vh;overflow-y:auto}
 .modal h3{font-size:16px;font-weight:700;margin-bottom:16px}
@@ -71,30 +69,24 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .modal .cat-opt span{font-size:14px}
 .modal-close{margin-top:16px;width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
 
-/* Toast */
 .toast{position:fixed;top:max(env(safe-area-inset-top),16px);left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:200;animation:fi .3s ease;pointer-events:none}
 .toast.err{background:var(--red)}
 
-/* Txn row detail */
 .txn-cat{font-size:10px;padding:2px 7px;border-radius:5px;background:var(--s2);color:var(--dim);display:inline-block;margin-top:3px}
 .txn-manual{background:var(--pbg);color:var(--purple)}
 
-/* Badge */
 .badge{font-size:9px;padding:3px 7px;border-radius:5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .badge.inc{background:var(--gbg);color:var(--green)}
 .badge.exp{background:var(--rbg);color:var(--red)}
 .badge.sav{background:var(--pbg);color:var(--purple)}
 
-/* Account label input */
 .label-input{display:flex;gap:8px;margin-bottom:16px}
 .label-input select,.label-input input{flex:1;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;outline:none}
 .label-input select:focus,.label-input input:focus{border-color:var(--purple)}
 
-/* Clear button */
 .clear-btn{padding:8px 14px;border-radius:10px;border:1px solid rgba(239,68,68,.3);background:var(--rbg);color:var(--red);font-size:11px;font-weight:600;cursor:pointer}
 .clear-btn:active{opacity:.7}
 
-/* Empty state */
 .empty{text-align:center;padding:60px 20px}
 .empty svg{width:56px;height:56px;color:var(--dim);margin-bottom:16px}
 .empty h2{font-size:18px;margin-bottom:8px;font-weight:700}
@@ -120,7 +112,6 @@ function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("
 
 var D=null,charts={},cv="upload",selAcct="all";
 
-// Nav
 document.querySelectorAll(".ni").forEach(function(el){
   el.addEventListener("click",function(){
     cv=el.dataset.v;
@@ -160,13 +151,11 @@ function filtered(){
 }
 
 function accounts(){return D?Object.keys(D.accounts||{}):[]}
-
 function expenses(){return filtered().filter(function(t){return t.type==="Expense"})}
 function income(){return filtered().filter(function(t){return t.type==="Income"})}
 function savings(){return filtered().filter(function(t){return t.type==="Savings"})}
 function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absAmount||0)},0)}
 
-// Load data
 async function load(){
   try{
     var r=await fetch("/api/transactions");
@@ -180,6 +169,7 @@ async function load(){
 
 function render(){
   var a=document.getElementById("app");
+  destroyCharts();
   if(cv==="upload")a.innerHTML=uploadView();
   else if(cv==="overview")a.innerHTML=overviewView();
   else if(cv==="spending")a.innerHTML=spendingView();
@@ -196,7 +186,7 @@ function uploadView(){
   '<div class="upload-zone fi" id="dropZone">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'+
     '<p>Tap to upload or drag your bank statement</p>'+
-    '<div class="hint">CSV and PDF files supported &middot; Savings, Current, Credit Card</div>'+
+    '<div class="hint">CSV and PDF files supported</div>'+
     '<input type="file" id="fileInput" accept=".csv,.pdf">'+
   '</div>'+
   '<div class="label-input fi">'+
@@ -227,7 +217,6 @@ function bindUpload(){
   zone.addEventListener("drop",function(e){e.preventDefault();zone.classList.remove("drag");if(e.dataTransfer.files.length)doUpload(e.dataTransfer.files[0])});
   inp.addEventListener("change",function(){if(inp.files.length)doUpload(inp.files[0])});
 
-  // Clear buttons
   var clearAll=document.getElementById("clearAll");
   if(clearAll)clearAll.addEventListener("click",async function(){
     if(!confirm("Remove all uploaded data?"))return;
@@ -259,7 +248,7 @@ async function doUpload(file){
   if(label)fd.append("accountLabel",label);
 
   var zone=document.getElementById("dropZone");
-  zone.innerHTML='<div class="spin" style="width:24px;height:24px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 10px"></div><p>Analyzing statement...</p>';
+  zone.innerHTML='<div style="width:24px;height:24px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 10px"></div><p>Analyzing statement...</p>';
 
   try{
     var r=await fetch("/api/upload",{method:"POST",body:fd});
@@ -296,7 +285,6 @@ function overviewView(){
   var e=expenses(),inc=income(),sv=savings();
   var ti=tot(inc),ts=tot(e),tsv=tot(sv),net=ti-ts-tsv;
 
-  // Category breakdown
   var cats={};
   e.forEach(function(t){cats[t.category]=(cats[t.category]||0)+t.absAmount});
   var sorted=Object.entries(cats).sort(function(a,b){return b[1]-a[1]});
@@ -321,12 +309,10 @@ function spendingView(){
   var e=expenses(),inc=income(),sv=savings();
   var ts=tot(e),ti=tot(inc);
 
-  // Category breakdown
   var cats={};
   e.forEach(function(t){cats[t.category]=(cats[t.category]||0)+t.absAmount});
   var sorted=Object.entries(cats).sort(function(a,b){return b[1]-a[1]});
 
-  // Income vs expenses vs savings
   return'<div class="head fi"><h1>Spending Analysis</h1></div>'+
   acctSelector()+
   '<div class="kgrid fi">'+
@@ -349,7 +335,6 @@ function txnView(){
     if(a.date>b.date)return -1;if(a.date<b.date)return 1;return 0;
   });
 
-  // Count uncategorized
   var uncat=txns.filter(function(t){return t.category==="Uncategorized"}).length;
 
   return'<div class="head fi"><h1>Transactions</h1></div>'+
@@ -416,7 +401,6 @@ async function updateCategory(account,txnId,newCat){
     });
     var data=await r.json();
     if(!r.ok)throw new Error(data.error);
-    // Update local data
     var txns=D.accounts[account];
     if(txns){
       var txn=txns.find(function(t){return t.id===txnId});
@@ -427,7 +411,7 @@ async function updateCategory(account,txnId,newCat){
       }
     }
     toast("Recategorized as "+newCat);
-    destroyCharts();render();
+    render();
   }catch(e){
     toast(e.message,true);
   }
@@ -447,7 +431,6 @@ function initCharts(){
   Chart.defaults.font.family="-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif";
   Chart.defaults.font.size=11;
 
-  // ch1: spending doughnut
   var el1=document.getElementById("ch1");
   if(el1){
     var e=expenses();
@@ -459,7 +442,6 @@ function initCharts(){
     },options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:10,usePointStyle:true,pointStyle:"rectRounded",font:{size:10}}}},animation:{animateRotate:true,duration:1000}}});
   }
 
-  // ch2: spending bar
   var el2=document.getElementById("ch2");
   if(el2){
     var e2=expenses();
@@ -471,7 +453,6 @@ function initCharts(){
     },options:{responsive:true,maintainAspectRatio:false,indexAxis:"y",plugins:{legend:{display:false}},scales:{x:{grid:{color:"rgba(45,58,82,.4)"},ticks:{callback:function(v){return"£"+v}}},y:{grid:{display:false},ticks:{font:{size:10}}}},animation:{duration:700}}});
   }
 
-  // ch3: income vs spending vs savings doughnut
   var el3=document.getElementById("ch3");
   if(el3){
     var ti=tot(income()),ts=tot(expenses()),tsv=tot(savings());
