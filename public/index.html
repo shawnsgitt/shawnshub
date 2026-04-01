@@ -66,6 +66,42 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 .modal .cat-opt span{font-size:14px}
 .modal-close{margin-top:16px;width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
 
+/* Batch categorization wizard */
+.batch-modal{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px max(env(safe-area-inset-bottom),24px);width:100%;max-width:600px;max-height:85vh;display:flex;flex-direction:column}
+.batch-header{flex-shrink:0;margin-bottom:12px}
+.batch-header h3{font-size:18px;font-weight:700;margin-bottom:4px}
+.batch-header .batch-stats{font-size:12px;color:var(--muted)}
+.batch-search{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px;margin-bottom:12px;outline:none;flex-shrink:0}
+.batch-search:focus{border-color:var(--purple)}
+.batch-search::placeholder{color:var(--dim)}
+.batch-tabs{display:flex;gap:6px;margin-bottom:12px;flex-shrink:0;overflow-x:auto;padding-bottom:4px}
+.batch-tab{padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;background:var(--s1);color:var(--dim);border:1px solid var(--border);transition:all .15s}
+.batch-tab.on{background:var(--pbg);color:var(--purple);border-color:rgba(168,85,247,.3)}
+.batch-body{flex:1;overflow-y:auto;margin-bottom:12px}
+.group-card{background:var(--s1);border-radius:12px;padding:14px;margin-bottom:8px;border:1px solid var(--border);transition:border-color .15s}
+.group-card.selected{border-color:var(--purple)}
+.group-top{display:flex;align-items:center;gap:10px;cursor:pointer}
+.group-check{width:20px;height:20px;border-radius:6px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;font-size:12px;color:transparent}
+.group-check.on{background:var(--purple);border-color:var(--purple);color:#fff}
+.group-info{flex:1;min-width:0}
+.group-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-meta{font-size:11px;color:var(--dim);margin-top:2px}
+.group-amt{font-size:14px;font-weight:700;color:var(--red);flex-shrink:0}
+.group-expand{cursor:pointer;padding:4px;color:var(--dim);font-size:11px;transition:color .15s}
+.group-expand:hover{color:var(--text)}
+.group-txns{margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.group-txn{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;color:var(--muted)}
+.group-txn .txn-desc{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px}
+.batch-actions{flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+.batch-apply-bar{display:flex;gap:8px;align-items:center}
+.batch-cat-select{flex:1;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:13px;font-weight:600;appearance:none;cursor:pointer;outline:none}
+.batch-apply-btn{padding:12px 20px;border-radius:12px;border:none;background:var(--purple);color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s;white-space:nowrap}
+.batch-apply-btn:disabled{opacity:.4;cursor:not-allowed}
+.batch-apply-btn:not(:disabled):active{opacity:.8}
+.batch-done-btn{width:100%;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
+.select-all-row{display:flex;align-items:center;gap:8px;padding:8px 0;margin-bottom:8px;cursor:pointer;flex-shrink:0}
+.select-all-row span{font-size:12px;font-weight:600;color:var(--muted)}
+
 .toast{position:fixed;top:max(env(safe-area-inset-top),16px);left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:200;animation:fi .3s ease;pointer-events:none}
 .toast.err{background:var(--red)}
 
@@ -246,57 +282,244 @@ async function doUpload(file){
   }
 }
 
-// ───────── UNCATEGORIZED WIZARD ─────────
-var uncatIdx=0;
+// ───────── BATCH CATEGORIZATION WIZARD ─────────
+function normalizeDesc(desc){
+  // Normalize transaction descriptions for grouping
+  // Remove dates, reference numbers, amounts, trailing numbers
+  var s = (desc||"").toLowerCase().trim();
+  // Remove common reference patterns like "ref: xxx", "txn xxx", card numbers
+  s = s.replace(/\b(ref|txn|transaction|card|payment)\s*[:# -]?\s*\d+\b/gi,"");
+  // Remove dates in various formats
+  s = s.replace(/\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?/g,"");
+  // Remove long number sequences (reference numbers, card numbers)
+  s = s.replace(/\b\d{4,}\b/g,"");
+  // Remove trailing numbers and extra whitespace
+  s = s.replace(/\s+\d{1,3}\s*$/,"");
+  // Remove currency symbols and amounts at end
+  s = s.replace(/[£$€]\s*[\d,.]+/g,"");
+  // Collapse whitespace
+  s = s.replace(/\s+/g," ").trim();
+  // Remove very short leftover (less than 3 chars)
+  if(s.length<3) return (desc||"").toLowerCase().trim();
+  return s;
+}
+
+function groupUncategorized(items){
+  var map={};
+  items.forEach(function(t){
+    var key=normalizeDesc(t.description);
+    if(!map[key]){
+      map[key]={
+        key:key,
+        displayName:t.description,
+        transactions:[],
+        total:0
+      };
+    }
+    map[key].transactions.push(t);
+    map[key].total+=t.absAmount;
+    // Use the shortest description as display name (usually cleanest)
+    if(t.description.length<map[key].displayName.length){
+      map[key].displayName=t.description;
+    }
+  });
+  // Sort groups by count descending (biggest groups first for efficiency)
+  return Object.values(map).sort(function(a,b){return b.transactions.length-a.transactions.length});
+}
+
+var batchState={groups:[],selected:{},expanded:{},search:"",view:"all"};
+
 function openUncatWizard(){
   var items=uncategorized();
   if(items.length===0){toast("All transactions are categorized!");return}
-  uncatIdx=0;
-  showUncatModal(items);
+  batchState.groups=groupUncategorized(items);
+  batchState.selected={};
+  batchState.expanded={};
+  batchState.search="";
+  batchState.view="all";
+  showBatchModal();
 }
 
-function showUncatModal(items){
-  if(uncatIdx>=items.length){
-    // Recalculate analysis
-    recalcAnalysis();
-    render();
-    toast("All done! Analysis updated");
-    return;
+function getFilteredGroups(){
+  var groups=batchState.groups;
+  var search=batchState.search.toLowerCase();
+  if(search){
+    groups=groups.filter(function(g){
+      return g.displayName.toLowerCase().includes(search)||g.key.includes(search);
+    });
   }
-  var t=items[uncatIdx];
+  if(batchState.view==="multi"){
+    groups=groups.filter(function(g){return g.transactions.length>1});
+  }else if(batchState.view==="single"){
+    groups=groups.filter(function(g){return g.transactions.length===1});
+  }
+  return groups;
+}
+
+function showBatchModal(){
   var existing=document.querySelector(".modal-bg");
   if(existing)existing.remove();
 
+  var items=uncategorized();
+  if(items.length===0){
+    recalcAnalysis();render();toast("All transactions categorized!");return;
+  }
+  // Recompute groups from current uncategorized
+  batchState.groups=groupUncategorized(items);
+
+  var groups=getFilteredGroups();
+  var totalGroups=batchState.groups.length;
+  var totalTxns=items.length;
+  var multiGroups=batchState.groups.filter(function(g){return g.transactions.length>1});
+  var multiTxns=multiGroups.reduce(function(s,g){return s+g.transactions.length},0);
+  var selectedCount=Object.keys(batchState.selected).filter(function(k){return batchState.selected[k]}).length;
+  var selectedTxnCount=0;
+  groups.forEach(function(g){if(batchState.selected[g.key])selectedTxnCount+=g.transactions.length});
+
   var bg=document.createElement("div");
   bg.className="modal-bg";
-  bg.innerHTML='<div class="modal"><h3>Categorize Transaction</h3>'+
-    '<div class="modal-sub">'+(uncatIdx+1)+' of '+items.length+' — <strong>'+t.description+'</strong> — '+(t.type==="Income"?"+":"-")+f(t.absAmount)+' — '+t.date+'</div>'+
-    '<div class="progress-bar"><span style="width:'+Math.round(uncatIdx/items.length*100)+'%;background:var(--purple)"></span></div>'+
-    CATS.filter(function(c){return c!=="Uncategorized"}).map(function(c){
-      return'<div class="cat-opt" data-cat="'+c+'"><div class="dot" style="background:'+cc(c)+'"></div><span>'+c+'</span></div>';
-    }).join("")+
-    '<button class="modal-close" id="skipUncat">Skip (keep uncategorized)</button>'+
-    '<button class="modal-close" id="skipAllUncat" style="margin-top:6px;color:var(--dim)">Skip all remaining</button></div>';
-  document.body.appendChild(bg);
+  bg.innerHTML=
+    '<div class="batch-modal">'+
+      '<div class="batch-header">'+
+        '<h3>Batch Categorize</h3>'+
+        '<div class="batch-stats">'+totalTxns+' transactions in '+totalGroups+' groups'+
+          (multiGroups.length>0?' &middot; <strong>'+multiGroups.length+' groups</strong> cover '+multiTxns+' transactions':'')+
+        '</div>'+
+      '</div>'+
+      '<input class="batch-search" type="text" placeholder="Search transactions..." value="'+batchState.search+'" id="batchSearch">'+
+      '<div class="batch-tabs">'+
+        '<div class="batch-tab'+(batchState.view==="all"?" on":"")+'" data-bv="all">All ('+totalGroups+')</div>'+
+        '<div class="batch-tab'+(batchState.view==="multi"?" on":"")+'" data-bv="multi">Multi ('+multiGroups.length+')</div>'+
+        '<div class="batch-tab'+(batchState.view==="single"?" on":"")+'" data-bv="single">Single ('+(totalGroups-multiGroups.length)+')</div>'+
+      '</div>'+
+      (groups.length>0?
+        '<div class="select-all-row" id="selectAll">'+
+          '<div class="group-check'+(selectedCount===groups.length&&groups.length>0?" on":"")+'">&#10003;</div>'+
+          '<span>Select all '+groups.length+' visible groups ('+groups.reduce(function(s,g){return s+g.transactions.length},0)+' transactions)</span>'+
+        '</div>':'')+
+      '<div class="batch-body" id="batchBody">'+
+        (groups.length===0?'<div style="text-align:center;padding:30px 0;color:var(--dim)">No matching groups found</div>':
+          groups.map(function(g,idx){
+            var isSelected=batchState.selected[g.key];
+            var isExpanded=batchState.expanded[g.key];
+            return '<div class="group-card'+(isSelected?" selected":"")+'" data-gkey="'+g.key+'">'+
+              '<div class="group-top" data-action="toggle">'+
+                '<div class="group-check'+(isSelected?" on":"")+'">&#10003;</div>'+
+                '<div class="group-info">'+
+                  '<div class="group-name">'+escHtml(g.displayName)+'</div>'+
+                  '<div class="group-meta">'+g.transactions.length+' transaction'+(g.transactions.length!==1?"s":"")+'</div>'+
+                '</div>'+
+                '<div class="group-amt">-'+f(g.total)+'</div>'+
+              '</div>'+
+              (g.transactions.length>1?'<div class="group-expand" data-action="expand">'+(isExpanded?"Hide":"Show")+' '+g.transactions.length+' transactions</div>':'')+
+              (isExpanded?'<div class="group-txns">'+g.transactions.map(function(t){
+                return '<div class="group-txn"><span class="txn-desc">'+escHtml(t.description)+'</span><span>'+t.date+'</span><span style="margin-left:8px;font-weight:600">-'+f(t.absAmount)+'</span></div>';
+              }).join("")+'</div>':'')+
+            '</div>';
+          }).join("")
+        )+
+      '</div>'+
+      '<div class="batch-actions">'+
+        '<div class="batch-apply-bar">'+
+          '<select class="batch-cat-select" id="batchCatSelect">'+
+            '<option value="">Choose category...</option>'+
+            CATS.filter(function(c){return c!=="Uncategorized"}).map(function(c){
+              return '<option value="'+c+'">'+c+'</option>';
+            }).join("")+
+          '</select>'+
+          '<button class="batch-apply-btn" id="batchApply" '+(selectedCount===0?"disabled":"")+'>Apply to '+selectedTxnCount+'</button>'+
+        '</div>'+
+        '<button class="batch-done-btn" id="batchDone">Done — close wizard</button>'+
+      '</div>'+
+    '</div>';
 
-  bg.addEventListener("click",function(e){
-    if(e.target===bg)return;
-    if(e.target.id==="skipUncat"||e.target.closest("#skipUncat")){
-      uncatIdx++;showUncatModal(items);return;
+  document.body.appendChild(bg);
+  bindBatchEvents(bg);
+}
+
+function escHtml(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+
+function bindBatchEvents(bg){
+  // Search
+  var searchInput=document.getElementById("batchSearch");
+  var searchTimer;
+  searchInput.addEventListener("input",function(){
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(function(){
+      batchState.search=searchInput.value;
+      showBatchModal();
+    },250);
+  });
+
+  // Tabs
+  bg.querySelectorAll(".batch-tab").forEach(function(tab){
+    tab.addEventListener("click",function(){
+      batchState.view=tab.dataset.bv;
+      showBatchModal();
+    });
+  });
+
+  // Select all
+  var selectAllRow=document.getElementById("selectAll");
+  if(selectAllRow){
+    selectAllRow.addEventListener("click",function(){
+      var groups=getFilteredGroups();
+      var allSelected=groups.every(function(g){return batchState.selected[g.key]});
+      groups.forEach(function(g){batchState.selected[g.key]=!allSelected});
+      showBatchModal();
+    });
+  }
+
+  // Group cards
+  bg.querySelectorAll(".group-card").forEach(function(card){
+    var key=card.dataset.gkey;
+    card.querySelector('[data-action="toggle"]').addEventListener("click",function(){
+      batchState.selected[key]=!batchState.selected[key];
+      showBatchModal();
+    });
+    var expandBtn=card.querySelector('[data-action="expand"]');
+    if(expandBtn){
+      expandBtn.addEventListener("click",function(e){
+        e.stopPropagation();
+        batchState.expanded[key]=!batchState.expanded[key];
+        showBatchModal();
+      });
     }
-    if(e.target.id==="skipAllUncat"||e.target.closest("#skipAllUncat")){
-      bg.remove();recalcAnalysis();render();toast("Analysis updated");return;
-    }
-    var opt=e.target.closest(".cat-opt");
-    if(!opt)return;
-    var cat=opt.dataset.cat;
-    // Update the transaction in memory
-    t.category=cat;
-    if(cat==="Income"){t.type="Income"}
-    else if(cat==="Savings"){t.type="Savings"}
-    else{t.type="Expense"}
-    uncatIdx++;
-    showUncatModal(items);
+  });
+
+  // Apply button
+  document.getElementById("batchApply").addEventListener("click",function(){
+    var catSelect=document.getElementById("batchCatSelect");
+    var cat=catSelect.value;
+    if(!cat){toast("Please select a category first",true);return}
+    var applied=0;
+    batchState.groups.forEach(function(g){
+      if(batchState.selected[g.key]){
+        g.transactions.forEach(function(t){
+          t.category=cat;
+          if(cat==="Income"){t.type="Income"}
+          else if(cat==="Savings"){t.type="Savings"}
+          else{t.type="Expense"}
+        });
+        applied+=g.transactions.length;
+      }
+    });
+    // Clear selection for applied groups
+    Object.keys(batchState.selected).forEach(function(k){
+      if(batchState.selected[k])delete batchState.selected[k];
+    });
+    batchState.expanded={};
+    toast(applied+" transactions categorized as "+cat);
+    // Refresh — will recompute groups from remaining uncategorized
+    showBatchModal();
+  });
+
+  // Done
+  document.getElementById("batchDone").addEventListener("click",function(){
+    bg.remove();
+    recalcAnalysis();
+    render();
+    toast("Analysis updated");
   });
 }
 
