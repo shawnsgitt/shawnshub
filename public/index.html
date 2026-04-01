@@ -237,7 +237,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 
 <script>
 var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
-var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b"};
+var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 
@@ -313,10 +313,10 @@ function bindAcctSelector(){
   });
 }
 
-function expenses(){return filtered().filter(function(t){return t.type==="Expense"})}
-function income(){return filtered().filter(function(t){return t.type==="Income"})}
-function savings(){return filtered().filter(function(t){return t.type==="Savings"})}
-function uncategorized(){return D?D.transactions.filter(function(t){return t.category==="Uncategorized"&&t.type!=="Non-Transactional"}):[]}
+function expenses(){return filtered().filter(function(t){var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;return et==="Expense"})}
+function income(){return filtered().filter(function(t){var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;return et==="Income"})}
+function savings(){return filtered().filter(function(t){var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;return et==="Savings"})}
+function uncategorized(){return D?D.transactions.filter(function(t){return (t.category==="Uncategorized"||t.category==="Pending Review")&&t.type!=="Non-Transactional"}):[]}
 function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absAmount||0)},0)}
 
 function render(){
@@ -395,9 +395,11 @@ function homeView(){
   var mt=monthlyTxns();
   var mIncome=0,mSpending=0;
   mt.forEach(function(t){
-    if(t.type==="Non-Transactional") return;
-    if(t.type==="Income")mIncome+=Math.abs(t.amount||t.absAmount||0);
-    else if(t.type==="Expense")mSpending+=Math.abs(t.amount||t.absAmount||0);
+    var effectiveType=t.type;
+    if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
+    if(effectiveType==="Non-Transactional") return;
+    if(effectiveType==="Income")mIncome+=Math.abs(t.amount||t.absAmount||0);
+    else if(effectiveType==="Expense")mSpending+=Math.abs(t.amount||t.absAmount||0);
   });
   var leftAfter=mIncome-mSpending;
 
@@ -406,6 +408,7 @@ function homeView(){
 
   return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
   acctSelector()+
+  (pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
   '<div class="snap-hero fi">'+
     '<div class="nw-label">Net Worth</div>'+
     '<div class="nw-val" style="color:'+(netWorth>=0?"var(--green)":"var(--red)")+'">'+(netWorth<0?"-":"")+f(Math.abs(netWorth))+'</div>'+
@@ -455,14 +458,16 @@ function uploadView(){
 
 function uploadSummary(){
   var a=D.analysis;
+  var pending=pendingReview().length;
   var uncat=uncategorized().length;
+  var needsReview=pending+uncat;
   return'<div class="ccard fi"><h3>Analysis Complete</h3>'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Transactions analyzed</span><span style="font-size:14px;font-weight:700">'+a.transactionCount+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Income detected</span><span style="font-size:14px;font-weight:700;color:var(--green)">'+f(a.totalIncome)+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Expenses detected</span><span style="font-size:14px;font-weight:700;color:var(--red)">'+f(a.totalExpenses)+'</span></div>'+
     '<div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--muted)">Categories found</span><span style="font-size:14px;font-weight:700">'+a.categoryBreakdown.length+'</span></div>'+
   '</div>'+
-  (uncat>0?'<div class="uncat-banner fi" id="uncatBanner"><h3>'+uncat+' uncategorized transaction'+(uncat!==1?'s':'')+'</h3><p>Tap here to categorize them for more accurate insights</p></div>':'')+
+  (needsReview>0?'<div class="uncat-banner fi" id="reviewBanner"><h3>'+needsReview+' transaction'+(needsReview!==1?'s':'')+' need'+(needsReview===1?'s':'')+' review</h3><p>Tap here to review and approve suggested categories</p></div>':'')+
   '<div style="text-align:center;padding:10px 0"><p style="font-size:12px;color:var(--dim)">Navigate to Dashboard, Breakdown, or Insights tabs to explore your analysis</p></div>';
 }
 
@@ -480,6 +485,15 @@ function bindUpload(){
   var clearBtn=document.getElementById("clearData");
   if(clearBtn)clearBtn.addEventListener("click",function(){
     D=null;render();toast("Analysis cleared");
+  });
+
+  var reviewBanner=document.getElementById("reviewBanner");
+  if(reviewBanner)reviewBanner.addEventListener("click",function(){
+    if(pendingReview().length>0){
+      openReviewWizard();
+    }else{
+      openUncatWizard();
+    }
   });
 
   var uncatBanner=document.getElementById("uncatBanner");
@@ -501,14 +515,20 @@ async function doUpload(file){
     var r=await fetch("/api/upload",{method:"POST",body:fd});
     var data=await r.json();
     if(!r.ok)throw new Error(data.error||"Upload failed");
+    // Store server-suggested categories but mark all as pending user review
+    data.transactions.forEach(function(t){
+      t.suggestedCategory=t.category;
+      t.suggestedType=t.type;
+      t.category="Pending Review";
+      t.type=t.suggestedType==="Non-Transactional"?"Non-Transactional":"Expense";
+      t.confirmed=false;
+    });
     D=data;
     buildAccounts();
-    toast(data.transactions.length+" transactions analyzed");
+    toast(data.transactions.length+" transactions ready for review");
     render();
-    // If uncategorized exist, prompt immediately
-    if(uncategorized().length>0){
-      setTimeout(function(){openUncatWizard()},500);
-    }
+    // Open review wizard for ALL transactions so user can approve suggestions
+    setTimeout(function(){openReviewWizard()},500);
   }catch(e){
     toast(e.message,true);
     render();
@@ -557,9 +577,17 @@ function groupUncategorized(items){
       map[key].displayName=t.description;
     }
   });
-  // Add smart suggestions for each group
+  // Add smart suggestions for each group — prefer suggestedCategory from server
   Object.values(map).forEach(function(g){
-    g.suggestion=smartSuggest(g.displayName,g.transactions);
+    // Use server-suggested category if available (from upload)
+    var serverSuggestion=null;
+    for(var i=0;i<g.transactions.length;i++){
+      if(g.transactions[i].suggestedCategory&&g.transactions[i].suggestedCategory!=="Uncategorized"&&g.transactions[i].suggestedCategory!=="Pending Review"){
+        serverSuggestion=g.transactions[i].suggestedCategory;
+        break;
+      }
+    }
+    g.suggestion=serverSuggestion||smartSuggest(g.displayName,g.transactions);
   });
   // Sort groups by count descending (biggest groups first for efficiency)
   return Object.values(map).sort(function(a,b){return b.transactions.length-a.transactions.length});
@@ -664,7 +692,7 @@ function learnCategories(mappings){
   }).catch(function(){});
 }
 
-var batchState={groups:[],selected:{},expanded:{},search:"",view:"all"};
+var batchState={groups:[],selected:{},expanded:{},search:"",view:"all",isReview:false};
 
 function openUncatWizard(){
   var items=uncategorized();
@@ -674,6 +702,28 @@ function openUncatWizard(){
   batchState.expanded={};
   batchState.search="";
   batchState.view="all";
+  showBatchModal();
+}
+
+// Review wizard for ALL pending transactions after upload
+function pendingReview(){
+  if(!D||!D.transactions)return[];
+  return D.transactions.filter(function(t){return t.confirmed===false||t.category==="Pending Review"});
+}
+
+function openReviewWizard(){
+  var items=pendingReview();
+  if(items.length===0){
+    // Fall back to uncategorized wizard
+    openUncatWizard();
+    return;
+  }
+  batchState.groups=groupUncategorized(items);
+  batchState.selected={};
+  batchState.expanded={};
+  batchState.search="";
+  batchState.view="all";
+  batchState.isReview=true;
   showBatchModal();
 }
 
@@ -699,11 +749,13 @@ function showBatchModal(){
   var existing=document.querySelector(".modal-bg");
   if(existing)existing.remove();
 
-  var items=uncategorized();
+  var isReviewMode=batchState.isReview;
+  var items=isReviewMode?pendingReview():uncategorized();
   if(items.length===0){
-    recalcAnalysis();render();toast("All transactions categorized!");return;
+    batchState.isReview=false;
+    recalcAnalysis();render();toast(isReviewMode?"All transactions reviewed!":"All transactions categorized!");return;
   }
-  // Recompute groups from current uncategorized
+  // Recompute groups from current items
   batchState.groups=groupUncategorized(items);
 
   var groups=getFilteredGroups();
@@ -722,8 +774,9 @@ function showBatchModal(){
   bg.innerHTML=
     '<div class="batch-modal">'+
       '<div class="batch-header">'+
-        '<h3>Batch Categorize</h3>'+
+        '<h3>'+(isReviewMode?'Review & Approve Categories':'Batch Categorize')+'</h3>'+
         '<div class="batch-stats">'+totalTxns+' transactions in '+totalGroups+' groups'+
+          (isReviewMode?' &middot; <strong>Review suggested categories before confirming</strong>':'')+
           (multiGroups.length>0?' &middot; <strong>'+multiGroups.length+' groups</strong> cover '+multiTxns+' transactions':'')+
         '</div>'+
       '</div>'+
@@ -734,11 +787,11 @@ function showBatchModal(){
         '<div class="batch-tab'+(batchState.view==="multi"?" on":"")+'" data-bv="multi">Multi ('+multiGroups.length+')</div>'+
         '<div class="batch-tab'+(batchState.view==="single"?" on":"")+'" data-bv="single">Single ('+(totalGroups-multiGroups.length)+')</div>'+
       '</div>'+
-      (suggestedGroups.length>0&&batchState.view!=="suggested"?
+      (suggestedGroups.length>0?
         '<div class="suggest-banner" id="acceptAllSuggestions" style="background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);border-radius:12px;padding:12px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .2s">'+
-          '<div><div style="font-size:13px;font-weight:700;color:var(--purple)">Accept All Suggestions</div>'+
-          '<div style="font-size:11px;color:var(--muted);margin-top:2px">Auto-categorize '+suggestedTxnCount+' transactions in '+suggestedGroups.length+' groups with one tap</div></div>'+
-          '<div style="background:var(--purple);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap">Accept All</div>'+
+          '<div><div style="font-size:13px;font-weight:700;color:var(--purple)">'+(isReviewMode?'Accept All Suggested Categories':'Accept All Suggestions')+'</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(isReviewMode?'Approve all '+suggestedTxnCount+' suggested categories at once':'Auto-categorize '+suggestedTxnCount+' transactions in '+suggestedGroups.length+' groups with one tap')+'</div></div>'+
+          '<div style="background:var(--purple);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap">'+(isReviewMode?'Approve All':'Accept All')+'</div>'+
         '</div>':'')+
       (groups.length>0?
         '<div class="select-all-row" id="selectAll">'+
@@ -781,7 +834,7 @@ function showBatchModal(){
           '</select>'+
           '<button class="batch-apply-btn" id="batchApply" '+(selectedCount===0?"disabled":"")+'>Apply to '+selectedTxnCount+'</button>'+
         '</div>'+
-        '<button class="batch-done-btn" id="batchDone">Done — close wizard</button>'+
+        '<button class="batch-done-btn" id="batchDone">'+(isReviewMode?'Done — approve remaining & save':'Done — close wizard')+'</button>'+
       '</div>'+
     '</div>';
 
@@ -822,13 +875,14 @@ function bindBatchEvents(bg){
           g.transactions.forEach(function(t){
             t.category=g.suggestion;
             t.type=typeForCategory(g.suggestion);
+            t.confirmed=true;
             toLearn.push({description:t.description,category:g.suggestion});
           });
           applied+=g.transactions.length;
         }
       });
       learnCategories(toLearn);
-      toast(applied+" transactions auto-categorized!");
+      toast(applied+" transactions approved!");
       showBatchModal();
     });
   }
@@ -870,6 +924,7 @@ function bindBatchEvents(bg){
           group.transactions.forEach(function(t){
             t.category=cat;
             t.type=typeForCategory(cat);
+            t.confirmed=true;
             toLearn.push({description:t.description,category:cat});
           });
           learnCategories(toLearn);
@@ -892,6 +947,7 @@ function bindBatchEvents(bg){
         g.transactions.forEach(function(t){
           t.category=cat;
           t.type=typeForCategory(cat);
+          t.confirmed=true;
           toLearn.push({description:t.description,category:cat});
         });
         applied+=g.transactions.length;
@@ -911,9 +967,23 @@ function bindBatchEvents(bg){
   // Done
   document.getElementById("batchDone").addEventListener("click",function(){
     bg.remove();
+    // Mark any remaining "Pending Review" transactions with their suggested category
+    if(D&&D.transactions){
+      D.transactions.forEach(function(t){
+        if(t.category==="Pending Review"&&t.suggestedCategory){
+          t.category=t.suggestedCategory;
+          t.type=t.suggestedType||typeForCategory(t.suggestedCategory);
+          t.confirmed=true;
+        }
+      });
+    }
+    batchState.isReview=false;
     recalcAnalysis();
     render();
-    toast("Analysis updated");
+    // Persist transactions to blobs and sync to hub
+    saveTransactionsToBlobs();
+    syncTransactionsToHub();
+    toast("Analysis updated & saved");
   });
 }
 
@@ -923,9 +993,14 @@ function recalcAnalysis(){
   var txns=D.transactions;
   var totalIncome=0,totalExpenses=0,totalSavings=0;
   txns.forEach(function(t){
-    if(t.type==="Non-Transactional") return; // exclude balance c/f and cash transfers
-    if(t.type==="Income")totalIncome+=t.absAmount;
-    else if(t.type==="Savings")totalSavings+=t.absAmount;
+    // Use suggested type/category for analysis if still pending review
+    var effectiveType=t.type;
+    if(t.category==="Pending Review"&&t.suggestedType){
+      effectiveType=t.suggestedType;
+    }
+    if(effectiveType==="Non-Transactional") return;
+    if(effectiveType==="Income")totalIncome+=t.absAmount;
+    else if(effectiveType==="Savings")totalSavings+=t.absAmount;
     else totalExpenses+=t.absAmount;
   });
   D.analysis.totalIncome=Math.round(totalIncome*100)/100;
@@ -933,12 +1008,19 @@ function recalcAnalysis(){
   D.analysis.totalSavings=Math.round(totalSavings*100)/100;
   D.analysis.net=Math.round((totalIncome-totalExpenses-totalSavings)*100)/100;
 
-  // Recalc category breakdown
+  // Recalc category breakdown — use effective category
   var catMap={};
-  txns.filter(function(t){return t.type==="Expense"}).forEach(function(t){
-    if(!catMap[t.category])catMap[t.category]={total:0,count:0};
-    catMap[t.category].total+=t.absAmount;
-    catMap[t.category].count++;
+  txns.forEach(function(t){
+    var effectiveType=t.type;
+    var effectiveCat=t.category;
+    if(t.category==="Pending Review"&&t.suggestedCategory){
+      effectiveCat=t.suggestedCategory;
+      effectiveType=t.suggestedType||typeForCategory(t.suggestedCategory);
+    }
+    if(effectiveType!=="Expense")return;
+    if(!catMap[effectiveCat])catMap[effectiveCat]={total:0,count:0};
+    catMap[effectiveCat].total+=t.absAmount;
+    catMap[effectiveCat].count++;
   });
   D.analysis.categoryBreakdown=Object.entries(catMap).map(function(e){
     return{name:e[0],total:Math.round(e[1].total*100)/100,count:e[1].count,percentage:totalExpenses>0?Math.round(e[1].total/totalExpenses*1000)/10:0};
@@ -1001,9 +1083,9 @@ function txnView(){
   });
   html+='</div>';
 
-  // Uncategorized banner
+  // Uncategorized / pending review banner
   if(uncatCount>0&&txnState.filter!=="uncategorized"){
-    html+='<div class="uncat-banner fi" onclick="openUncatWizard()" style="margin-bottom:14px"><h3>'+uncatCount+' uncategorized</h3><p>Tap to batch categorize for better insights</p></div>';
+    html+='<div class="uncat-banner fi" onclick="'+(pendingReview().length>0?'openReviewWizard()':'openUncatWizard()')+'" style="margin-bottom:14px"><h3>'+uncatCount+' need'+(uncatCount===1?'s':'')+' review</h3><p>Tap to review and approve suggested categories</p></div>';
   }
 
   // Transaction list
@@ -1014,14 +1096,20 @@ function txnView(){
     var typeColors={Expense:"var(--rbg)",Income:"var(--gbg)",Savings:"var(--pbg)","Non-Transactional":"rgba(100,116,139,.1)"};
     var typeTextColors={Expense:"var(--red)",Income:"var(--green)",Savings:"var(--purple)","Non-Transactional":"var(--dim)"};
     paged.forEach(function(t,idx){
-      var amtColor=t.type==="Income"||t.type==="Cash In"?"var(--green)":t.type==="Savings"?"var(--purple)":t.type==="Non-Transactional"?"var(--dim)":"var(--red)";
-      var amtPrefix=t.type==="Income"||t.type==="Cash In"?"+":t.type==="Non-Transactional"?"":"-";
+      // Use effective type for display
+      var effectiveType=t.type;
+      if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
+      var displayCat=t.category==="Pending Review"&&t.suggestedCategory?(t.suggestedCategory+" (suggested)"):t.category;
+      var isPending=t.category==="Pending Review"||t.category==="Uncategorized";
+      var amtColor=effectiveType==="Income"||effectiveType==="Cash In"?"var(--green)":effectiveType==="Savings"?"var(--purple)":effectiveType==="Non-Transactional"?"var(--dim)":"var(--red)";
+      var amtPrefix=effectiveType==="Income"||effectiveType==="Cash In"?"+":effectiveType==="Non-Transactional"?"":"-";
       html+='<div class="txn-list-item fi" style="animation-delay:'+(Math.min(idx,20)*0.02)+'s" data-txn-id="'+t.id+'">'+
-        '<div class="txn-icon" style="background:'+typeColors[t.type]+';color:'+typeTextColors[t.type]+'">'+typeIcons[t.type]+'</div>'+
+        '<div class="txn-icon" style="background:'+(typeColors[effectiveType]||typeColors["Expense"])+';color:'+(typeTextColors[effectiveType]||typeTextColors["Expense"])+'">'+
+          (typeIcons[effectiveType]||typeIcons["Expense"])+'</div>'+
         '<div class="txn-details">'+
           '<div class="txn-desc-line">'+escHtml(t.description)+'</div>'+
           '<div class="txn-meta-line">'+
-            '<span style="padding:2px 7px;border-radius:5px;background:'+(t.category==="Uncategorized"?"var(--abg)":"var(--s2)")+';color:'+(t.category==="Uncategorized"?"var(--amber)":"var(--dim)")+';font-weight:'+(t.category==="Uncategorized"?"600":"400")+'">'+t.category+'</span>'+
+            '<span style="padding:2px 7px;border-radius:5px;background:'+(isPending?"var(--abg)":"var(--s2)")+';color:'+(isPending?"var(--amber)":"var(--dim)")+';font-weight:'+(isPending?"600":"400")+'">'+displayCat+'</span>'+
             '<span>'+t.date+'</span>'+
           '</div>'+
         '</div>'+
@@ -1112,6 +1200,7 @@ function openCategoryModal(txn){
       var cat=opt.dataset.cat;
       txn.category=cat;
       txn.type=typeForCategory(cat);
+      txn.confirmed=true;
       learnCategories([{description:txn.description,category:cat}]);
       bg.remove();
       recalcAnalysis();
@@ -1487,6 +1576,7 @@ function moreView(){
     {key:"spending",name:"Spending",sub:"Category breakdown",icon:"&#128176;",bg:"var(--rbg)",color:"var(--red)"},
     {key:"income",name:"Income",sub:"Track income sources",icon:"&#128178;",bg:"var(--gbg)",color:"var(--green)"},
     {key:"budget",name:"Budget",sub:"Planned vs actual",icon:"&#128200;",bg:"var(--pbg)",color:"var(--purple)"},
+    {key:"subscriptions",name:"Subscriptions",sub:"Recurring services",icon:"&#128257;",bg:"rgba(6,182,212,.1)",color:"var(--cyan)"},
     {key:"savings-goals",name:"Savings Goals",sub:"Track your targets",icon:"&#127919;",bg:"var(--abg)",color:"var(--amber)"},
     {key:"debt",name:"Debt Tracker",sub:"Manage what you owe",icon:"&#128179;",bg:"var(--rbg)",color:"var(--red)"},
     {key:"investments",name:"Investments",sub:"Track growth",icon:"&#128200;",bg:"rgba(59,130,246,.1)",color:"var(--blue)"},
@@ -1505,6 +1595,7 @@ function hubSectionView(section){
   if(section==="spending")return breakdownView();
   if(section==="income")return incomeView();
   if(section==="budget")return budgetView();
+  if(section==="subscriptions")return subscriptionsView();
   if(section==="savings-goals")return savingsGoalsView();
   if(section==="debt")return debtView();
   if(section==="investments")return investmentsView();
@@ -1532,6 +1623,7 @@ function bindHubEvents(){
   // Bind section-specific events
   if(hubSection==="income")bindIncomeEvents();
   if(hubSection==="budget")bindBudgetEvents();
+  if(hubSection==="subscriptions")bindSubscriptionsEvents();
   if(hubSection==="savings-goals")bindSavingsEvents();
   if(hubSection==="debt")bindDebtEvents();
   if(hubSection==="investments")bindInvestmentsEvents();
@@ -1674,6 +1766,91 @@ function bindBudgetEvents(){
   document.querySelectorAll("[data-del-budget]").forEach(function(b){
     b.addEventListener("click",async function(){
       await hubDelete("budget",b.dataset.delBudget);await hubLoad("budget");toast("Removed");render();
+    });
+  });
+}
+
+// ───────── SUBSCRIPTIONS VIEW ─────────
+function subscriptionsView(){
+  var data=hubCache["subscriptions"]||{items:[]};
+  var items=data.items||[];
+  var html=hubBackBtn("Subscriptions");
+
+  // Summary
+  var totalActive=items.filter(function(i){return i.status==="active"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var activeCount=items.filter(function(i){return i.status==="active"}).length;
+
+  html+='<div class="summary-grid fi">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActive)+'</div><div class="ss-label">Active Monthly</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeCount+'</div><div class="ss-label">Active Subscriptions</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActive*12)+'</div><div class="ss-label">Yearly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.2)"><div class="ss-val" style="color:var(--purple)">'+items.length+'</div><div class="ss-label">Total Tracked</div></div>';
+  html+='</div>';
+
+  // Show transactions detected from upload
+  var uploadDetected=items.filter(function(i){return i.source==="upload"});
+  if(uploadDetected.length>0){
+    html+='<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)"><strong style="color:var(--purple)">'+uploadDetected.length+' subscription'+(uploadDetected.length!==1?'s':'')+' auto-detected</strong> from your uploaded bank statement</div>';
+  }
+
+  // Add form
+  html+='<div class="ccard fi"><h3>Add Subscription</h3>';
+  html+='<div class="form-group"><label class="form-label">Service Name</label><input class="form-input" id="subName" placeholder="e.g. Netflix, Spotify, Adobe"></div>';
+  html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="subAmt" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="subFreq"><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option><option value="Weekly">Weekly</option><option value="Quarterly">Quarterly</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Category</label><select class="form-select" id="subCat"><option value="Entertainment">Entertainment</option><option value="Streaming">Streaming</option><option value="Software">Software</option><option value="Music">Music</option><option value="Cloud Storage">Cloud Storage</option><option value="Gaming">Gaming</option><option value="News & Media">News & Media</option><option value="Fitness">Fitness</option><option value="Other">Other</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Status</label><select class="form-select" id="subStatus"><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></div>';
+  html+='<button class="btn-primary" id="subAdd">Add Subscription</button></div>';
+
+  // List subscriptions
+  if(items.length>0){
+    var active=items.filter(function(i){return i.status==="active"});
+    var inactive=items.filter(function(i){return i.status!=="active"});
+
+    if(active.length>0){
+      html+='<div class="sec fi"><div class="stitle">Active Subscriptions</div>';
+      active.forEach(function(it){
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--cyan)">'+f(it.amount)+'</div><div class="status-pill paid">active</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Pause</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
+      });
+      html+='</div>';
+    }
+
+    if(inactive.length>0){
+      html+='<div class="sec fi"><div class="stitle">Paused / Cancelled</div>';
+      inactive.forEach(function(it){
+        var statusClass=it.status==="paused"?"pending":"overdue";
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--dim)">'+f(it.amount)+'</div><div class="status-pill '+statusClass+'">'+it.status+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Reactivate</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
+      });
+      html+='</div>';
+    }
+  }
+  return html;
+}
+
+function bindSubscriptionsEvents(){
+  var addBtn=document.getElementById("subAdd");
+  if(addBtn)addBtn.addEventListener("click",async function(){
+    var name=document.getElementById("subName").value.trim();
+    if(!name){toast("Please enter subscription name",true);return}
+    addBtn.disabled=true;
+    await hubAdd("subscriptions",{name:name,amount:parseFloat(document.getElementById("subAmt").value)||0,frequency:document.getElementById("subFreq").value,subCategory:document.getElementById("subCat").value,status:document.getElementById("subStatus").value});
+    await hubLoad("subscriptions");toast("Subscription added");render();
+  });
+  document.querySelectorAll("[data-del-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      await hubDelete("subscriptions",b.dataset.delSub);await hubLoad("subscriptions");toast("Removed");render();
+    });
+  });
+  document.querySelectorAll("[data-toggle-sub]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.toggleSub});
+      if(!item)return;
+      item.status=item.status==="active"?"paused":"active";
+      hubUpdate("subscriptions",item).then(function(){hubLoad("subscriptions").then(function(){toast("Status: "+item.status);render()})});
     });
   });
 }
@@ -2120,7 +2297,108 @@ function bindGoalsEvents(){
   });
 }
 
+// ───────── DATA PERSISTENCE (save/load transactions to Netlify Blobs) ─────────
+async function saveTransactionsToBlobs(){
+  if(!D||!D.transactions)return;
+  try{
+    await fetch("/api/hub-data?collection=uploaded-transactions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({action:"set",data:{items:D.transactions,analysis:D.analysis,savedAt:new Date().toISOString()}})
+    });
+  }catch(e){/* silent */}
+}
+
+async function loadTransactionsFromBlobs(){
+  try{
+    var r=await fetch("/api/hub-data?collection=uploaded-transactions");
+    var data=await r.json();
+    if(data&&data.items&&data.items.length>0){
+      D={transactions:data.items,analysis:data.analysis||{},success:true};
+      buildAccounts();
+      if(!D.analysis||!D.analysis.categoryBreakdown){
+        recalcAnalysis();
+      }
+      return true;
+    }
+  }catch(e){/* silent */}
+  return false;
+}
+
+// ───────── SYNC TRANSACTIONS TO HUB (bills, subscriptions, etc.) ─────────
+async function syncTransactionsToHub(){
+  if(!D||!D.transactions)return;
+  var confirmed=D.transactions.filter(function(t){return t.confirmed!==false});
+
+  // Extract unique recurring bills from "Bills & Utilities" transactions
+  var billTxns=confirmed.filter(function(t){return t.category==="Bills & Utilities"});
+  var billGroups={};
+  billTxns.forEach(function(t){
+    var key=normalizeDesc(t.description);
+    if(!billGroups[key]){
+      billGroups[key]={name:t.description,total:0,count:0,amounts:[]};
+    }
+    billGroups[key].total+=t.absAmount;
+    billGroups[key].count++;
+    billGroups[key].amounts.push(t.absAmount);
+  });
+
+  // Extract subscriptions
+  var subTxns=confirmed.filter(function(t){return t.category==="Subscriptions"});
+  var subGroups={};
+  subTxns.forEach(function(t){
+    var key=normalizeDesc(t.description);
+    if(!subGroups[key]){
+      subGroups[key]={name:t.description,total:0,count:0,amounts:[]};
+    }
+    subGroups[key].total+=t.absAmount;
+    subGroups[key].count++;
+    subGroups[key].amounts.push(t.absAmount);
+  });
+
+  // Sync bills to hub
+  try{
+    var existingBills=await fetch("/api/hub-data?collection=bills").then(function(r){return r.json()});
+    var existingBillNames=(existingBills.items||[]).map(function(b){return normalizeDesc(b.name)});
+
+    for(var bk in billGroups){
+      var bg=billGroups[bk];
+      if(existingBillNames.indexOf(bk)===-1){
+        var avgAmt=Math.round(bg.total/bg.count*100)/100;
+        await fetch("/api/hub-data?collection=bills",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"add",item:{name:bg.name,amount:avgAmt,dueDate:"",method:"Auto-detected from statement",status:"pending",source:"upload"}})
+        });
+      }
+    }
+  }catch(e){/* silent */}
+
+  // Sync subscriptions to hub
+  try{
+    var existingSubs=await fetch("/api/hub-data?collection=subscriptions").then(function(r){return r.json()});
+    var existingSubNames=(existingSubs.items||[]).map(function(s){return normalizeDesc(s.name)});
+
+    for(var sk in subGroups){
+      var sg=subGroups[sk];
+      if(existingSubNames.indexOf(sk)===-1){
+        var avgSubAmt=Math.round(sg.total/sg.count*100)/100;
+        await fetch("/api/hub-data?collection=subscriptions",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"add",item:{name:sg.name,amount:avgSubAmt,frequency:"Monthly",status:"active",source:"upload"}})
+        });
+      }
+    }
+  }catch(e){/* silent */}
+}
+
 // ───────── INIT ─────────
+// Load saved transactions on page load
+(async function(){
+  var loaded=await loadTransactionsFromBlobs();
+  if(loaded)render();
+})();
 render();
 </script>
 </body>

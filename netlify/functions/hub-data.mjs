@@ -4,7 +4,8 @@ import { getStore } from "@netlify/blobs";
 // Stores: income, budget, savings-goals, debt, investments, bills, emergency, financial-goals
 const VALID_STORES = [
   "income", "budget", "savings-goals", "debt",
-  "investments", "bills", "emergency", "financial-goals"
+  "investments", "bills", "emergency", "financial-goals",
+  "subscriptions", "uploaded-transactions"
 ];
 
 function json(data, status = 200) {
