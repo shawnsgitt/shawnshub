@@ -19,6 +19,6 @@
   "homepage": "https://github.com/shawnsgitt/shawnshub#readme",
   "dependencies": {
     "@netlify/blobs": "^10.7.4",
-    "pdf-parse": "^2.4.5"
+    "xlsx": "^0.18.5"
   }
 }
