@@ -69,39 +69,97 @@ const CATEGORY_RULES = [
 // Non-transactional types — these are not expenses or income
 const NON_TRANSACTIONAL_CATEGORIES = new Set(["Balance Carried Forward", "Cash Transfer"]);
 
-function categorize(description, learnedMappings) {
+// Ambiguous merchants that should have lower confidence
+const AMBIGUOUS_MERCHANTS = new Set([
+  "amazon", "paypal", "apple", "google", "ebay", "cash",
+  "transfer", "payment", "pos", "purchase", "debit"
+]);
+
+function isAmbiguousMerchant(description) {
+  const lower = (description || "").toLowerCase();
+  for (const m of AMBIGUOUS_MERCHANTS) {
+    if (lower.includes(m)) return true;
+  }
+  return false;
+}
+
+function categorizeWithConfidence(description, learnedMappings) {
   // First check if this is a balance carried forward entry
   if (isBalanceCarriedForward(description)) {
-    return "Balance Carried Forward";
+    return { category: "Balance Carried Forward", confidence: 0.99, reason: "Matches balance carried forward pattern", source: "rule", alternatives: [] };
   }
 
   const lower = (description || "").toLowerCase();
+  const ambiguous = isAmbiguousMerchant(description);
 
   // Check learned mappings first (user-trained categories — highest confidence)
   if (learnedMappings && learnedMappings.mappings) {
     const normalized = normalizeForLearning(description);
     const learned = learnedMappings.mappings[normalized];
     if (learned && learned.category && learned.count >= 1) {
-      return learned.category;
+      const count = learned.count || 1;
+      const corrections = learned.corrections || 0;
+      // Confidence increases with confirmations: 0.80 at 1, 0.90 at 3, 0.95 at 5+
+      let conf = Math.min(0.98, 0.75 + (count * 0.05));
+      // Reduce confidence if there have been corrections
+      if (corrections > 0) conf = Math.max(0.55, conf - (corrections * 0.10));
+      if (ambiguous) conf = Math.max(0.60, conf - 0.15);
+      const reason = count >= 5 && corrections === 0
+        ? `Same merchant confirmed ${count} times — trusted`
+        : count >= 2
+        ? `Confirmed ${count} times before` + (corrections > 0 ? ` (corrected ${corrections}x)` : "")
+        : "Matched your previous categorisation";
+      return { category: learned.category, confidence: Math.round(conf * 100) / 100, reason, source: "learned", alternatives: [] };
     }
   }
 
   // Check keyword rules (high confidence)
+  const keywordMatches = [];
   for (const rule of CATEGORY_RULES) {
     for (const keyword of rule.keywords) {
       if (lower.includes(keyword)) {
-        return rule.category;
+        keywordMatches.push({ category: rule.category, keyword });
       }
     }
+  }
+  if (keywordMatches.length > 0) {
+    const primary = keywordMatches[0];
+    let conf = ambiguous ? 0.65 : 0.82;
+    // If multiple keyword rules match the same category, boost confidence
+    const sameCat = keywordMatches.filter(m => m.category === primary.category);
+    if (sameCat.length > 1) conf = Math.min(0.92, conf + 0.05);
+    // Collect unique alternatives
+    const altSet = new Set();
+    keywordMatches.forEach(m => { if (m.category !== primary.category) altSet.add(m.category); });
+    if (altSet.size > 0) conf = Math.max(0.55, conf - 0.08);
+    return {
+      category: primary.category,
+      confidence: Math.round(conf * 100) / 100,
+      reason: `Keyword match: "${primary.keyword}"`,
+      source: "keyword",
+      alternatives: Array.from(altSet).slice(0, 3)
+    };
   }
 
   // Smart suggestion — pattern-based heuristic categorization
   const suggested = suggestCategory(description);
   if (suggested) {
-    return suggested;
+    let conf = ambiguous ? 0.45 : 0.62;
+    return {
+      category: suggested,
+      confidence: Math.round(conf * 100) / 100,
+      reason: "Pattern match from description",
+      source: "pattern",
+      alternatives: []
+    };
   }
 
-  return "Uncategorized";
+  return { category: "Uncategorized", confidence: 0, reason: "No matching rules found", source: "none", alternatives: [] };
+}
+
+// Backwards-compatible wrapper
+function categorize(description, learnedMappings) {
+  return categorizeWithConfidence(description, learnedMappings).category;
 }
 
 function parseAmount(val) {
@@ -362,26 +420,30 @@ function parseExcelSheet(rows, headers, learnedMappings) {
     }
   }
 
-  // Second pass: build final transactions with corrected amounts
+  // Second pass: build final transactions with corrected amounts and confidence
   const transactions = [];
   for (const entry of rawEntries) {
-    const category = categorize(entry.description, learnedMappings);
+    const result = categorizeWithConfidence(entry.description, learnedMappings);
 
     // Determine transaction type
     let type;
-    if (NON_TRANSACTIONAL_CATEGORIES.has(category)) {
+    if (NON_TRANSACTIONAL_CATEGORIES.has(result.category)) {
       type = "Non-Transactional";
-    } else if (category === "Income" || category === "Cash In") {
+    } else if (result.category === "Income" || result.category === "Cash In") {
       type = "Income";
-    } else if (category === "Savings") {
+    } else if (result.category === "Savings") {
       type = "Savings";
-    } else if (category === "Cash Withdrawal") {
+    } else if (result.category === "Cash Withdrawal") {
       type = "Expense";
     } else if (entry.amount > 0) {
       type = "Income";
     } else {
       type = "Expense";
     }
+
+    // Confidence label thresholds
+    const confidenceLabel = result.confidence >= 0.85 ? "high"
+      : result.confidence >= 0.60 ? "medium" : "low";
 
     transactions.push({
       id: `txn_${Date.now()}_${entry.index}`,
@@ -390,9 +452,14 @@ function parseExcelSheet(rows, headers, learnedMappings) {
       amount: entry.amount,
       absAmount: Math.abs(entry.amount),
       balance: entry.balance,
-      category,
+      category: result.category,
       type,
       account: "",
+      confidence: result.confidence,
+      confidenceLabel,
+      reason: result.reason,
+      source: result.source,
+      alternatives: result.alternatives,
     });
   }
 

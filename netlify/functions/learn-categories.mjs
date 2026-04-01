@@ -69,12 +69,19 @@ export default async (req) => {
             category: m.category,
             example: m.description,
             count: 1,
+            corrections: 0,
             lastSeen: new Date().toISOString(),
           };
         } else {
-          // Update existing — increment count and update category if changed
+          // Track corrections: if the user changed the category, increment corrections
+          if (data.mappings[key].category !== m.category) {
+            data.mappings[key].corrections = (data.mappings[key].corrections || 0) + 1;
+            // Reset count to rebuild trust with new category
+            data.mappings[key].count = 1;
+          } else {
+            data.mappings[key].count = (data.mappings[key].count || 0) + 1;
+          }
           data.mappings[key].category = m.category;
-          data.mappings[key].count = (data.mappings[key].count || 0) + 1;
           data.mappings[key].lastSeen = new Date().toISOString();
         }
         learned++;
