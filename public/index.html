@@ -161,8 +161,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 </nav>
 
 <script>
-var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Income","Savings","Uncategorized"];
-var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Uncategorized":"#64748b"};
+var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Income","Savings","Cash Withdrawal","Bank Fees","Uncategorized"];
+var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Bank Fees":"#dc2626","Uncategorized":"#64748b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 
@@ -313,7 +313,8 @@ function groupUncategorized(items){
         key:key,
         displayName:t.description,
         transactions:[],
-        total:0
+        total:0,
+        suggestion:null
       };
     }
     map[key].transactions.push(t);
@@ -323,8 +324,49 @@ function groupUncategorized(items){
       map[key].displayName=t.description;
     }
   });
+  // Add smart suggestions for each group
+  Object.values(map).forEach(function(g){
+    g.suggestion=smartSuggest(g.displayName,g.transactions);
+  });
   // Sort groups by count descending (biggest groups first for efficiency)
   return Object.values(map).sort(function(a,b){return b.transactions.length-a.transactions.length});
+}
+
+// Smart suggestion engine: guesses likely category from description patterns
+function smartSuggest(desc,txns){
+  var lower=(desc||"").toLowerCase();
+  // Payment/transfer patterns
+  if(/\b(rent|landlord|property|estate agent|letting)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(electric|gas|water|council|rates|levy|municipal)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(insurance|insure|cover|policy)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(vodafone|mtn|vodacom|cell c|ee|o2|giffgaff|three|telkom|airtel)\b/.test(lower)) return "Bills & Utilities";
+  if(/\b(gym|fitness|sport|active|exercise)\b/.test(lower)) return "Health & Fitness";
+  if(/\b(pharmacy|chemist|medical|doctor|dr |clinic|hospital|dental|optom)\b/.test(lower)) return "Health & Fitness";
+  if(/\b(uber|bolt|lyft|taxi|cab|ride)\b/.test(lower)) return "Transport";
+  if(/\b(fuel|petrol|diesel|garage|shell|bp|caltex|engen|sasol|esso|total)\b/.test(lower)) return "Transport";
+  if(/\b(parking|park|ncp)\b/.test(lower)) return "Transport";
+  if(/\b(restaurant|cafe|coffee|food|eat|dine|grill|kitchen|bistro|bar)\b/.test(lower)) return "Eating Out";
+  if(/\b(takeaway|take away|delivery|order)\b/.test(lower)) return "Eating Out";
+  if(/\b(shop|store|mart|retail|buy|purchase|outlet|boutique)\b/.test(lower)) return "Shopping";
+  if(/\b(amazon|ebay|online|click|web)\b/.test(lower)) return "Shopping";
+  if(/\b(salary|wage|pay\b|payroll|income|commission|bonus)\b/.test(lower)) return "Income";
+  if(/\b(refund|reversal|cashback)\b/.test(lower)) return "Income";
+  if(/\b(atm|withdraw|cash)\b/.test(lower)) return "Cash Withdrawal";
+  if(/\b(fee|charge|admin|penalty|interest charge|overdraft)\b/.test(lower)) return "Bank Fees";
+  if(/\b(transfer|trfr|eft|send|remit|allowance)\b/.test(lower)) return "Family Support";
+  if(/\b(subscri|member|renewal|recurring|monthly|annual)\b/.test(lower)) return "Subscriptions";
+  if(/\b(save|saving|invest|deposit|isa |bond|vanguard|etf)\b/.test(lower)) return "Savings";
+  if(/\b(school|university|college|tuition|course|book|study|learn)\b/.test(lower)) return "Education";
+  if(/\b(salon|barber|hair|beauty|spa|nail|massage)\b/.test(lower)) return "Personal Care";
+  if(/\b(cinema|movie|theatre|concert|ticket|event|show|game|play)\b/.test(lower)) return "Entertainment";
+  if(/\b(church|charity|donat|tithe|offering|gift)\b/.test(lower)) return "Family Support";
+  // Check amount patterns — very small recurring amounts might be subscriptions
+  if(txns&&txns.length>=2){
+    var amounts=txns.map(function(t){return t.absAmount});
+    var allSame=amounts.every(function(a){return Math.abs(a-amounts[0])<0.1});
+    if(allSame&&amounts[0]<100) return "Subscriptions";
+  }
+  return null;
 }
 
 var batchState={groups:[],selected:{},expanded:{},search:"",view:"all"};
@@ -352,6 +394,8 @@ function getFilteredGroups(){
     groups=groups.filter(function(g){return g.transactions.length>1});
   }else if(batchState.view==="single"){
     groups=groups.filter(function(g){return g.transactions.length===1});
+  }else if(batchState.view==="suggested"){
+    groups=groups.filter(function(g){return g.suggestion!=null});
   }
   return groups;
 }
@@ -375,6 +419,8 @@ function showBatchModal(){
   var selectedCount=Object.keys(batchState.selected).filter(function(k){return batchState.selected[k]}).length;
   var selectedTxnCount=0;
   groups.forEach(function(g){if(batchState.selected[g.key])selectedTxnCount+=g.transactions.length});
+  var suggestedGroups=batchState.groups.filter(function(g){return g.suggestion!=null});
+  var suggestedTxnCount=suggestedGroups.reduce(function(s,g){return s+g.transactions.length},0);
 
   var bg=document.createElement("div");
   bg.className="modal-bg";
@@ -389,9 +435,16 @@ function showBatchModal(){
       '<input class="batch-search" type="text" placeholder="Search transactions..." value="'+batchState.search+'" id="batchSearch">'+
       '<div class="batch-tabs">'+
         '<div class="batch-tab'+(batchState.view==="all"?" on":"")+'" data-bv="all">All ('+totalGroups+')</div>'+
+        '<div class="batch-tab'+(batchState.view==="suggested"?" on":"")+'" data-bv="suggested">Suggested ('+suggestedGroups.length+')</div>'+
         '<div class="batch-tab'+(batchState.view==="multi"?" on":"")+'" data-bv="multi">Multi ('+multiGroups.length+')</div>'+
         '<div class="batch-tab'+(batchState.view==="single"?" on":"")+'" data-bv="single">Single ('+(totalGroups-multiGroups.length)+')</div>'+
       '</div>'+
+      (suggestedGroups.length>0&&batchState.view!=="suggested"?
+        '<div class="suggest-banner" id="acceptAllSuggestions" style="background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);border-radius:12px;padding:12px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .2s">'+
+          '<div><div style="font-size:13px;font-weight:700;color:var(--purple)">Accept All Suggestions</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px">Auto-categorize '+suggestedTxnCount+' transactions in '+suggestedGroups.length+' groups with one tap</div></div>'+
+          '<div style="background:var(--purple);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;white-space:nowrap">Accept All</div>'+
+        '</div>':'')+
       (groups.length>0?
         '<div class="select-all-row" id="selectAll">'+
           '<div class="group-check'+(selectedCount===groups.length&&groups.length>0?" on":"")+'">&#10003;</div>'+
@@ -402,15 +455,19 @@ function showBatchModal(){
           groups.map(function(g,idx){
             var isSelected=batchState.selected[g.key];
             var isExpanded=batchState.expanded[g.key];
+            var hasSuggestion=g.suggestion!=null;
             return '<div class="group-card'+(isSelected?" selected":"")+'" data-gkey="'+g.key+'">'+
               '<div class="group-top" data-action="toggle">'+
                 '<div class="group-check'+(isSelected?" on":"")+'">&#10003;</div>'+
                 '<div class="group-info">'+
                   '<div class="group-name">'+escHtml(g.displayName)+'</div>'+
-                  '<div class="group-meta">'+g.transactions.length+' transaction'+(g.transactions.length!==1?"s":"")+'</div>'+
+                  '<div class="group-meta">'+g.transactions.length+' transaction'+(g.transactions.length!==1?"s":"")+
+                    (hasSuggestion?' &middot; <span style="color:var(--purple);font-weight:600">Suggested: '+g.suggestion+'</span>':'')+
+                  '</div>'+
                 '</div>'+
                 '<div class="group-amt">-'+f(g.total)+'</div>'+
               '</div>'+
+              (hasSuggestion?'<div class="quick-accept" data-action="quickAccept" data-cat="'+g.suggestion+'" style="margin:8px 0 0 30px;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.25);cursor:pointer;font-size:11px;font-weight:600;color:var(--purple);transition:background .15s"><span style="font-size:13px">&#10003;</span> Accept as '+g.suggestion+'</div>':'')+
               (g.transactions.length>1?'<div class="group-expand" data-action="expand">'+(isExpanded?"Hide":"Show")+' '+g.transactions.length+' transactions</div>':'')+
               (isExpanded?'<div class="group-txns">'+g.transactions.map(function(t){
                 return '<div class="group-txn"><span class="txn-desc">'+escHtml(t.description)+'</span><span>'+t.date+'</span><span style="margin-left:8px;font-weight:600">-'+f(t.absAmount)+'</span></div>';
@@ -459,6 +516,27 @@ function bindBatchEvents(bg){
     });
   });
 
+  // Accept All Suggestions button
+  var acceptAllBtn=document.getElementById("acceptAllSuggestions");
+  if(acceptAllBtn){
+    acceptAllBtn.addEventListener("click",function(){
+      var applied=0;
+      batchState.groups.forEach(function(g){
+        if(g.suggestion){
+          g.transactions.forEach(function(t){
+            t.category=g.suggestion;
+            if(g.suggestion==="Income"){t.type="Income"}
+            else if(g.suggestion==="Savings"){t.type="Savings"}
+            else{t.type="Expense"}
+          });
+          applied+=g.transactions.length;
+        }
+      });
+      toast(applied+" transactions auto-categorized!");
+      showBatchModal();
+    });
+  }
+
   // Select all
   var selectAllRow=document.getElementById("selectAll");
   if(selectAllRow){
@@ -483,6 +561,24 @@ function bindBatchEvents(bg){
         e.stopPropagation();
         batchState.expanded[key]=!batchState.expanded[key];
         showBatchModal();
+      });
+    }
+    var quickAcceptBtn=card.querySelector('[data-action="quickAccept"]');
+    if(quickAcceptBtn){
+      quickAcceptBtn.addEventListener("click",function(e){
+        e.stopPropagation();
+        var cat=quickAcceptBtn.dataset.cat;
+        var group=batchState.groups.find(function(g){return g.key===key});
+        if(group){
+          group.transactions.forEach(function(t){
+            t.category=cat;
+            if(cat==="Income"){t.type="Income"}
+            else if(cat==="Savings"){t.type="Savings"}
+            else{t.type="Expense"}
+          });
+          toast(group.transactions.length+" categorized as "+cat);
+          showBatchModal();
+        }
       });
     }
   });
@@ -599,6 +695,20 @@ function dashboardView(){
   // Where money goes chart
   html+='<div class="sec fi" style="animation-delay:.1s"><div class="ccard"><h3>Where your money goes</h3><div class="cwrap"><canvas id="ch1"></canvas></div></div></div>';
 
+  // Income vs Expenses comparison chart
+  html+='<div class="sec fi" style="animation-delay:.12s"><div class="ccard"><h3>Income vs Expenses</h3><div style="height:140px"><canvas id="chInExp"></canvas></div></div></div>';
+
+  // Spending gauge
+  var gaugePercent=ti>0?Math.min(100,Math.round(ts/ti*100)):0;
+  var gaugeColor=gaugePercent>90?"var(--red)":gaugePercent>70?"var(--amber)":"var(--green)";
+  html+='<div class="sec fi" style="animation-delay:.14s"><div class="ccard"><h3>Spending Gauge</h3>'+
+    '<div style="position:relative;width:160px;height:80px;margin:16px auto 0;overflow:hidden">'+
+      '<div style="position:absolute;width:160px;height:160px;border-radius:50%;border:14px solid var(--border);border-bottom-color:transparent;border-left-color:transparent;transform:rotate(225deg)"></div>'+
+      '<div style="position:absolute;width:160px;height:160px;border-radius:50%;border:14px solid transparent;border-top-color:'+gaugeColor+';border-right-color:'+gaugeColor+';'+(gaugePercent>50?'border-bottom-color:'+gaugeColor+';':'')+'transform:rotate('+(225+gaugePercent*2.7)+'deg);transition:transform 1s ease"></div>'+
+      '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);text-align:center"><div style="font-size:28px;font-weight:800;color:'+gaugeColor+'">'+gaugePercent+'%</div><div style="font-size:10px;color:var(--dim)">of income spent</div></div>'+
+    '</div>'+
+  '</div></div>';
+
   // Top spending categories
   if(top3.length>0){
     html+='<div class="sec fi" style="animation-delay:.15s"><div class="stitle">Biggest Expenses</div><div class="top-cat-grid">';
@@ -616,6 +726,27 @@ function dashboardView(){
     html+='<div class="row"><div class="dot" style="background:'+cc(c.name)+'"></div><div style="flex:1"><div style="display:flex;justify-content:space-between"><span class="rname">'+c.name+'</span><span class="ramt">'+f(c.total)+'</span></div><div class="rbar"><span style="width:'+c.percentage+'%;background:'+cc(c.name)+'"></span></div><div style="font-size:10px;color:var(--dim);margin-top:2px">'+c.count+' transaction'+(c.count!==1?"s":"")+" &middot; "+c.percentage+'%</div></div></div>';
   }
   html+='</div>';
+
+  // Transaction type distribution (pie chart)
+  var typeStats={};
+  D.transactions.forEach(function(t){
+    if(!typeStats[t.type])typeStats[t.type]={count:0,total:0};
+    typeStats[t.type].count++;
+    typeStats[t.type].total+=t.absAmount;
+  });
+  html+='<div class="sec fi" style="animation-delay:.25s"><div class="ccard"><h3>Transaction Distribution</h3>'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">';
+  Object.keys(typeStats).forEach(function(type){
+    var s=typeStats[type];
+    var typeColor=type==="Income"?"var(--green)":type==="Savings"?"var(--purple)":"var(--red)";
+    var pct=D.transactions.length>0?Math.round(s.count/D.transactions.length*100):0;
+    html+='<div style="flex:1;min-width:100px;text-align:center;padding:12px;background:var(--s1);border-radius:12px;border:1px solid var(--border)">'+
+      '<div style="font-size:24px;font-weight:800;color:'+typeColor+'">'+s.count+'</div>'+
+      '<div style="font-size:10px;color:var(--dim);margin-top:2px">'+type+' ('+pct+'%)</div>'+
+      '<div style="font-size:12px;font-weight:600;margin-top:4px">'+f(s.total)+'</div>'+
+    '</div>';
+  });
+  html+='</div></div></div>';
 
   return html;
 }
@@ -637,6 +768,9 @@ function breakdownView(){
 
   // Bar chart
   html+='<div class="sec fi" style="animation-delay:.05s"><div class="ccard"><h3>Spending by category</h3><div class="cwrap"><canvas id="ch2"></canvas></div></div></div>';
+
+  // Polar area chart for visual balance
+  html+='<div class="sec fi" style="animation-delay:.07s"><div class="ccard"><h3>Category Balance</h3><div class="cwrap"><canvas id="chPolar"></canvas></div></div></div>';
 
   // Income vs Spending vs Savings doughnut
   html+='<div class="sec fi" style="animation-delay:.1s"><div class="ccard"><h3>Income vs Spending vs Savings</h3><div class="cwrap"><canvas id="ch3"></canvas></div></div></div>';
@@ -685,8 +819,23 @@ function insightsView(){
     '<div class="kgrid">'+
       '<div class="k b"><div class="l">Daily Spend</div><div class="v">'+f(ts/30)+'</div><div class="sub">avg per day</div></div>'+
       '<div class="k a"><div class="l">Per Transaction</div><div class="v">'+f(expenses().length>0?ts/expenses().length:0)+'</div><div class="sub">avg expense</div></div>'+
+      '<div class="k g"><div class="l">Weekly Surplus</div><div class="v">'+f((ti-ts)/4)+'</div><div class="sub">avg per week</div></div>'+
+      '<div class="k p"><div class="l">Categories</div><div class="v">'+a.categoryBreakdown.length+'</div><div class="sub">expense types</div></div>'+
     '</div>'+
   '</div>';
+
+  // Spending composition — stacked bar showing each category's proportion
+  html+='<div class="sec fi" style="animation-delay:.07s"><div class="ccard"><h3>Spending Composition</h3>'+
+    '<div style="display:flex;height:32px;border-radius:8px;overflow:hidden;margin:12px 0">';
+  var catData=a.categoryBreakdown;
+  for(var ci=0;ci<catData.length;ci++){
+    html+='<div style="width:'+catData[ci].percentage+'%;background:'+cc(catData[ci].name)+';transition:width .8s ease" title="'+catData[ci].name+': '+catData[ci].percentage+'%"></div>';
+  }
+  html+='</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">';
+  for(var ci2=0;ci2<catData.length;ci2++){
+    html+='<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)"><span style="width:8px;height:8px;border-radius:2px;background:'+cc(catData[ci2].name)+';flex-shrink:0"></span>'+catData[ci2].name+' '+catData[ci2].percentage+'%</span>';
+  }
+  html+='</div></div></div>';
 
   // Recommendations
   if(recs.length>0){
@@ -790,6 +939,33 @@ function initCharts(){
       labels:["Income","Spending","Savings"],
       datasets:[{data:[Math.round(a.totalIncome),Math.round(a.totalExpenses),Math.round(a.totalSavings)],backgroundColor:["#22c55e","#ef4444","#a855f7"],borderWidth:0,hoverOffset:6}]
     },options:{responsive:true,maintainAspectRatio:false,cutout:"62%",plugins:{legend:{position:"bottom",labels:{padding:14,usePointStyle:true,pointStyle:"rectRounded"}},tooltip:{callbacks:{label:function(ctx){return ctx.label+": £"+ctx.raw.toLocaleString("en-GB")}}}},animation:{animateRotate:true,duration:1000}}});
+  }
+
+  // Income vs Expenses bar comparison
+  var elInExp=document.getElementById("chInExp");
+  if(elInExp&&hasData()){
+    var a2=D.analysis;
+    charts.cInExp=new Chart(elInExp,{type:"bar",data:{
+      labels:["Income","Expenses","Savings","Net"],
+      datasets:[{data:[Math.round(a2.totalIncome),Math.round(a2.totalExpenses),Math.round(a2.totalSavings),Math.round(a2.net)],
+        backgroundColor:["rgba(34,197,94,.7)","rgba(239,68,68,.7)","rgba(168,85,247,.7)",a2.net>=0?"rgba(34,197,94,.7)":"rgba(239,68,68,.7)"],
+        borderRadius:8,borderSkipped:false}]
+    },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return"£"+ctx.raw.toLocaleString("en-GB")}}}},
+      scales:{x:{grid:{display:false}},y:{grid:{color:"rgba(45,58,82,.4)"},ticks:{callback:function(v){return"£"+v}}}},animation:{duration:700}}});
+  }
+
+  // Polar area chart for breakdown
+  var elPolar=document.getElementById("chPolar");
+  if(elPolar&&hasData()){
+    var cats4=D.analysis.categoryBreakdown.slice(0,8);
+    charts.cPolar=new Chart(elPolar,{type:"polarArea",data:{
+      labels:cats4.map(function(c){return c.name}),
+      datasets:[{data:cats4.map(function(c){return Math.round(c.total)}),
+        backgroundColor:cats4.map(function(c){return cc(c.name)+"cc"}),
+        borderWidth:1,borderColor:cats4.map(function(c){return cc(c.name)})}]
+    },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{padding:10,usePointStyle:true,pointStyle:"rectRounded",font:{size:10}}},
+      tooltip:{callbacks:{label:function(ctx){return ctx.label+": £"+ctx.raw.toLocaleString("en-GB")}}}},
+      scales:{r:{grid:{color:"rgba(45,58,82,.3)"},ticks:{display:false}}},animation:{duration:800}}});
   }
 }
 

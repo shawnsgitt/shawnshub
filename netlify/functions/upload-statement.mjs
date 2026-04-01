@@ -1,20 +1,22 @@
 import * as XLSX from "xlsx";
 
-// Category keywords for auto-categorization
+// Category keywords for auto-categorization — extensive list for maximum auto-match
 const CATEGORY_RULES = [
-  { category: "Groceries", keywords: ["tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose", "co-op", "coop", "ocado", "m&s food", "iceland", "spar", "costco", "grocery", "supermarket", "farm foods"] },
-  { category: "Eating Out", keywords: ["mcdonald", "burger king", "kfc", "nando", "pizza", "domino", "uber eats", "deliveroo", "just eat", "starbucks", "costa", "greggs", "pret", "subway", "restaurant", "cafe", "coffee", "takeaway", "wetherspoon", "wagamama", "five guys", "zizzi", "gourmet"] },
-  { category: "Transport", keywords: ["tfl", "transport for london", "uber", "bolt", "lyft", "bus", "train", "rail", "fuel", "petrol", "shell", "bp", "esso", "texaco", "parking", "congestion", "dart charge", "taxi", "national rail", "oyster", "go-ahead"] },
-  { category: "Shopping", keywords: ["amazon", "ebay", "asos", "zara", "h&m", "primark", "next", "argos", "john lewis", "currys", "ikea", "tk maxx", "sports direct", "nike", "adidas", "new look", "river island", "shein", "boohoo", "apple store", "google store"] },
-  { category: "Subscriptions", keywords: ["netflix", "spotify", "disney", "youtube premium", "apple music", "amazon prime", "hulu", "now tv", "sky", "virgin media", "bt broadband", "audible", "adobe", "microsoft 365", "icloud", "google one", "playstation", "xbox", "crunchyroll", "patreon", "chatgpt", "openai"] },
-  { category: "Bills & Utilities", keywords: ["electric", "gas", "water", "council tax", "tv licence", "broadband", "internet", "phone bill", "mobile", "ee ", "vodafone", "three", "o2 ", "giffgaff", "insurance", "rent", "mortgage", "british gas", "edf", "eon", "octopus energy", "thames water", "scottish power", "bulb"] },
-  { category: "Health & Fitness", keywords: ["gym", "puregym", "the gym", "david lloyd", "fitness first", "pharmacy", "boots", "superdrug", "doctor", "dentist", "hospital", "health", "vitamin", "myprotein", "holland & barrett", "nuffield"] },
-  { category: "Entertainment", keywords: ["cinema", "odeon", "cineworld", "vue", "theatre", "concert", "ticket", "ticketmaster", "eventbrite", "gaming", "steam", "playstation store", "nintendo", "bowling", "museum", "zoo", "theme park"] },
-  { category: "Education", keywords: ["udemy", "coursera", "skillshare", "book", "waterstones", "wh smith", "tuition", "school", "university", "student", "course"] },
-  { category: "Personal Care", keywords: ["barber", "hairdresser", "salon", "spa", "beauty", "nail", "lush", "the body shop", "perfume"] },
-  { category: "Family Support", keywords: ["transfer to", "family", "gift", "charity", "donation"] },
-  { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc"] },
-  { category: "Savings", keywords: ["savings", "save", "investment", "isa", "premium bond", "vanguard", "trading 212", "freetrade", "nutmeg", "moneybox"] },
+  { category: "Groceries", keywords: ["tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose", "co-op", "coop", "ocado", "m&s food", "marks & spencer food", "iceland", "spar", "costco", "grocery", "supermarket", "farm foods", "whole foods", "wholefoods", "shoprite", "pick n pay", "checkers", "woolworths food", "food lover", "fruit & veg", "butcher", "bakery", "market", "fresh", "farmfoods", "heron foods", "jack's", "booths", "nisa"] },
+  { category: "Eating Out", keywords: ["mcdonald", "burger king", "kfc", "nando", "pizza", "domino", "uber eats", "deliveroo", "just eat", "starbucks", "costa", "greggs", "pret", "subway", "restaurant", "cafe", "coffee", "takeaway", "wetherspoon", "wagamama", "five guys", "zizzi", "gourmet", "eat ", "dine", "dining", "food delivery", "grubhub", "doordash", "postmates", "chipotle", "taco bell", "wendy", "chick-fil-a", "popeyes", "panera", "dunkin", "tim horton", "sushi", "ramen", "kebab", "chicken", "grill", "steers", "wimpy", "debonairs", "roman's", "fishaways", "ocean basket", "spur", "mugg & bean", "vida e", "seattle coffee", "nero"] },
+  { category: "Transport", keywords: ["tfl", "transport for london", "uber trip", "bolt", "lyft", "bus", "train", "rail", "fuel", "petrol", "diesel", "shell", "bp", "esso", "texaco", "parking", "congestion", "dart charge", "taxi", "national rail", "oyster", "go-ahead", "engen", "caltex", "sasol", "total garage", "garage", "tollgate", "toll", "e-toll", "etoll", "gautrain", "metrorail", "rea vaya", "myciti", "golden arrow", "car wash", "car service", "tyres", "motor", "vehicle", "aa ", "rac ", "mot test", "breakdown"] },
+  { category: "Shopping", keywords: ["amazon", "ebay", "asos", "zara", "h&m", "primark", "next", "argos", "john lewis", "currys", "ikea", "tk maxx", "sports direct", "nike", "adidas", "new look", "river island", "shein", "boohoo", "apple store", "google store", "takealot", "mr price", "jet ", "edgars", "game ", "incredible connect", "makro", "builders", "clothing", "fashion", "shoes", "retail", "store", "shop", "mall", "outlet", "pep ", "ackermans", "truworths", "cotton on", "superdry", "uniqlo", "gap ", "mango", "forever 21", "pull & bear", "bershka", "massimo dutti", "matalan", "george ", "tu clothing", "decathlon"] },
+  { category: "Subscriptions", keywords: ["netflix", "spotify", "disney", "youtube premium", "apple music", "amazon prime", "hulu", "now tv", "sky ", "virgin media", "bt broadband", "audible", "adobe", "microsoft 365", "icloud", "google one", "playstation plus", "ps plus", "xbox game pass", "crunchyroll", "patreon", "chatgpt", "openai", "dstv", "showmax", "multichoice", "monthly sub", "subscription", "membership", "renewal", "recurring", "annual fee", "apple tv", "hbo", "paramount", "peacock", "deezer", "tidal", "canva", "notion", "dropbox", "github", "linkedin premium", "twitch"] },
+  { category: "Bills & Utilities", keywords: ["electric", "gas ", "water", "council tax", "tv licence", "broadband", "internet", "phone bill", "mobile", "ee ", "vodafone", "three ", "o2 ", "giffgaff", "insurance", "rent ", "mortgage", "british gas", "edf", "eon", "octopus energy", "thames water", "scottish power", "bulb", "eskom", "city power", "city of johannesburg", "city of cape town", "rates", "levy", "body corporate", "municipal", "telkom", "mtn ", "cell c", "vodacom", "fibre", "wifi", "rain ", "afrihost", "webafrica", "nbn", "comcast", "at&t", "verizon", "spectrum", "strata", "property management", "maintenance fee", "service charge"] },
+  { category: "Health & Fitness", keywords: ["gym", "puregym", "the gym", "david lloyd", "fitness first", "pharmacy", "boots", "superdrug", "doctor", "dentist", "hospital", "health", "vitamin", "myprotein", "holland & barrett", "nuffield", "clicks", "dischem", "dis-chem", "planet fitness", "virgin active", "medical", "clinic", "optometrist", "optician", "physio", "therapist", "counsell", "psychology", "chiropract", "pathology", "lancet", "ampath", "discovery health", "medical aid", "bupa", "vitality", "wellness", "supplement", "protein"] },
+  { category: "Entertainment", keywords: ["cinema", "odeon", "cineworld", "vue", "theatre", "concert", "ticket", "ticketmaster", "eventbrite", "gaming", "steam", "playstation store", "nintendo", "bowling", "museum", "zoo", "theme park", "ster-kinekor", "nu metro", "computicket", "webtickets", "festival", "event", "arcade", "laser", "escape room", "comedy", "show", "performance", "gallery", "aquarium", "funfair", "amusement"] },
+  { category: "Education", keywords: ["udemy", "coursera", "skillshare", "book", "waterstones", "wh smith", "tuition", "school", "university", "student", "course", "college", "academy", "training", "workshop", "seminar", "exam", "certification", "study", "learning", "lecture", "textbook", "stationery", "cna ", "exclusive books", "loot.co", "kindle", "amazon book"] },
+  { category: "Personal Care", keywords: ["barber", "hairdresser", "salon", "spa", "beauty", "nail", "lush", "the body shop", "perfume", "cosmetic", "makeup", "skincare", "grooming", "massage", "facial", "wax", "sorbet", "rain salon", "reed & barton", "dermatolog", "aesthetic"] },
+  { category: "Family Support", keywords: ["transfer to", "family", "gift", "charity", "donation", "send money", "remittance", "allowance", "pocket money", "church", "tithe", "offering", "zakat", "support", "maintenance"] },
+  { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
+  { category: "Savings", keywords: ["savings", "save", "investment", "isa", "premium bond", "vanguard", "trading 212", "freetrade", "nutmeg", "moneybox", "unit trust", "money market", "fixed deposit", "notice deposit", "capitec save", "fnb save", "easy equities", "etf", "satrix", "sygnia", "allan gray", "coronation", "stanlib"] },
+  { category: "Cash Withdrawal", keywords: ["atm", "cash withdrawal", "cashback", "cash back at", "withdraw", "cash send", "cardless"] },
+  { category: "Bank Fees", keywords: ["bank charge", "bank fee", "service fee", "transaction fee", "admin fee", "card fee", "account fee", "monthly fee", "annual fee", "interest charged", "overdraft", "debit order fee", "eft fee", "penalty", "late fee"] },
 ];
 
 function categorize(description) {
@@ -39,14 +41,24 @@ function parseAmount(val) {
 
 function findColumn(headers, tests) {
   return headers.findIndex((h) => {
-    const lower = h.toLowerCase();
+    const lower = h.toLowerCase().trim();
     return tests.some((t) => lower.includes(t));
   });
 }
 
+// Smart suggestion: guess a likely category from description even if no keyword matches
+function suggestCategory(description) {
+  const lower = (description || "").toLowerCase();
+  // Patterns that hint at common categories
+  if (/\b(pay|pymt|payment|eft|debit order)\b/i.test(lower) && /\b(rent|landlord|property|estate)\b/i.test(lower)) return "Bills & Utilities";
+  if (/\b(transfer|trfr?|eft|zelle|venmo|cashapp)\b/i.test(lower) && !/\b(saving|invest)\b/i.test(lower)) return null; // could be anything
+  if (/pos\b|point of sale|card purchase|purchase/i.test(lower)) return null; // too generic
+  return null;
+}
+
 function isHeaderRow(values) {
   const joined = values.map((v) => String(v).toLowerCase()).join(" ");
-  return joined.includes("date") && (joined.includes("description") || joined.includes("memo") || joined.includes("narrative") || joined.includes("details") || joined.includes("transaction") || joined.includes("reference") || joined.includes("payee") || joined.includes("amount") || joined.includes("debit") || joined.includes("credit") || joined.includes("balance"));
+  return joined.includes("date") && (joined.includes("description") || joined.includes("memo") || joined.includes("narrative") || joined.includes("details") || joined.includes("transaction") || joined.includes("reference") || joined.includes("payee") || joined.includes("seller") || joined.includes("merchant") || joined.includes("beneficiary") || joined.includes("particulars") || joined.includes("amount") || joined.includes("debit") || joined.includes("credit") || joined.includes("balance"));
 }
 
 function findHeaderRow(sheet) {
@@ -69,12 +81,16 @@ function parseExcelSheet(rows, headers) {
   if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
   const dateCol = findColumn(headers, ["date"]);
-  const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "transaction", "reference", "payee"]);
+  const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "particulars", "payee", "beneficiary", "merchant", "seller"]);
   const amountCol = findColumn(headers, ["amount", "value"]);
-  const debitCol = findColumn(headers, ["debit", "money out", "paid out", "withdrawal"]);
-  const creditCol = findColumn(headers, ["credit", "money in", "paid in", "deposit"]);
-  const balanceCol = findColumn(headers, ["balance"]);
-  const typeCol = findColumn(headers, ["type", "transaction type", "dr/cr", "dr cr"]);
+  const debitCol = findColumn(headers, ["debit", "money out", "paid out", "withdrawal", "dr"]);
+  const creditCol = findColumn(headers, ["credit", "money in", "paid in", "deposit", "cr"]);
+  const balanceCol = findColumn(headers, ["balance", "running balance", "closing balance"]);
+  const typeCol = findColumn(headers, ["type", "transaction type", "dr/cr", "dr cr", "entry type"]);
+
+  // Also look for a "reference" or "seller/payee" column as secondary description
+  const refCol = findColumn(headers, ["reference", "ref", "transaction ref"]);
+  const sellerCol = findColumn(headers, ["seller", "merchant", "payee", "beneficiary"]);
 
   if (dateCol === -1) {
     throw new Error("Could not find a Date column. Please ensure your Excel file has a Date header.");
@@ -98,38 +114,47 @@ function parseExcelSheet(rows, headers) {
       date = String(rawDate).trim();
     }
 
-    const description = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
+    const rawDesc = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
+    // If there's a separate seller/merchant column, prefer it or combine
+    const sellerVal = sellerCol >= 0 && sellerCol !== descCol ? String(values[sellerCol] || "").trim() : "";
+    const refVal = refCol >= 0 && refCol !== descCol ? String(values[refCol] || "").trim() : "";
+    // Build the best description: seller > description > reference
+    let description = sellerVal || rawDesc || refVal || "";
+    // If seller is separate and description adds context, combine them
+    if (sellerVal && rawDesc && sellerVal.toLowerCase() !== rawDesc.toLowerCase()) {
+      description = sellerVal + " - " + rawDesc;
+    }
     if (!date || !description) continue;
 
     let amount = 0;
 
-    // Prefer separate debit/credit columns over a single amount column
-    // Debit = money OUT (expense), Credit = money IN (income)
+    // Strategy: Use the most specific columns available
+    // Debit = money OUT (expense/negative), Credit = money IN (income/positive)
     if (hasDebitCredit) {
       const debitVal = debitCol >= 0 ? parseAmount(values[debitCol]) : 0;
       const creditVal = creditCol >= 0 ? parseAmount(values[creditCol]) : 0;
-      // Debit column values represent money going OUT -> make negative
-      // Credit column values represent money coming IN -> keep positive
-      if (creditVal > 0) {
+
+      if (creditVal !== 0 && debitVal !== 0) {
+        // Both filled — net them (unusual but some banks do this)
+        amount = Math.abs(creditVal) - Math.abs(debitVal);
+      } else if (creditVal !== 0) {
+        // Credit column: money IN → positive
         amount = Math.abs(creditVal);
-      } else if (debitVal > 0) {
+      } else if (debitVal !== 0) {
+        // Debit column: money OUT → negative
         amount = -Math.abs(debitVal);
-      } else if (debitVal < 0) {
-        // Some banks use negative in debit col to mean money out
-        amount = debitVal;
-      } else if (creditVal < 0) {
-        amount = creditVal;
       }
     } else if (amountCol >= 0) {
       amount = parseAmount(values[amountCol]);
       // Check for a type column that indicates debit/credit
       if (typeCol >= 0) {
         const typeVal = String(values[typeCol] || "").toLowerCase().trim();
-        if (typeVal === "dr" || typeVal === "debit" || typeVal === "d") {
+        if (typeVal === "dr" || typeVal === "debit" || typeVal === "d" || typeVal === "expense" || typeVal === "withdrawal") {
           amount = -Math.abs(amount);
-        } else if (typeVal === "cr" || typeVal === "credit" || typeVal === "c") {
+        } else if (typeVal === "cr" || typeVal === "credit" || typeVal === "c" || typeVal === "income" || typeVal === "deposit") {
           amount = Math.abs(amount);
         }
+        // Otherwise trust the sign
       }
       // If no type column, trust the sign from the amount column as-is
     }
@@ -153,6 +178,7 @@ function parseExcelSheet(rows, headers) {
       id: `txn_${i}`,
       date,
       description,
+      seller: sellerVal || "",
       amount,
       absAmount: Math.abs(amount),
       balance,
@@ -162,6 +188,44 @@ function parseExcelSheet(rows, headers) {
   }
 
   return { transactions };
+}
+
+// Post-parse: verify debit/credit orientation using balance progression
+// If balance goes UP when we say expense, signs are likely inverted
+function verifyAndFixOrientation(transactions) {
+  // Check consecutive rows where balance is available
+  let correctCount = 0;
+  let invertedCount = 0;
+  for (let i = 1; i < transactions.length; i++) {
+    const prev = transactions[i - 1];
+    const curr = transactions[i];
+    if (prev.balance != null && curr.balance != null) {
+      const balanceDiff = curr.balance - prev.balance;
+      if (Math.abs(balanceDiff) < 0.01) continue; // skip zero diffs
+      // If amount sign matches balance movement direction, orientation is correct
+      if ((curr.amount > 0 && balanceDiff > 0) || (curr.amount < 0 && balanceDiff < 0)) {
+        correctCount++;
+      } else if ((curr.amount > 0 && balanceDiff < 0) || (curr.amount < 0 && balanceDiff > 0)) {
+        invertedCount++;
+      }
+    }
+  }
+
+  // If inverted signals outnumber correct ones by 2:1, flip all signs
+  if (invertedCount > correctCount * 2 && invertedCount >= 3) {
+    transactions.forEach(t => {
+      t.amount = -t.amount;
+      // Recategorize type based on new amount
+      if (t.category === "Income" || t.amount > 0) {
+        t.type = "Income";
+      } else if (t.category === "Savings") {
+        t.type = "Savings";
+      } else {
+        t.type = "Expense";
+      }
+    });
+  }
+  return transactions;
 }
 
 function parseExcel(buffer) {
@@ -202,6 +266,9 @@ function parseExcel(buffer) {
     const detail = sheetErrors.length > 0 ? " Sheet issues: " + sheetErrors.join("; ") : "";
     throw new Error("No transactions found in any sheet." + detail);
   }
+
+  // Verify and fix orientation using balance column if available
+  verifyAndFixOrientation(allTransactions);
 
   return allTransactions;
 }
