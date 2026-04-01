@@ -519,6 +519,13 @@ async function doUpload(file){
     data.transactions.forEach(function(t){
       t.suggestedCategory=t.category;
       t.suggestedType=t.type;
+      // Preserve confidence metadata from server
+      t.confidence=t.confidence||0;
+      t.confidenceLabel=t.confidenceLabel||"low";
+      t.reason=t.reason||"";
+      t.alternatives=t.alternatives||[];
+      // Confirmation status: unreviewed → suggested → confirmed/corrected
+      t.reviewStatus="suggested";
       t.category="Pending Review";
       t.type=t.suggestedType==="Non-Transactional"?"Non-Transactional":"Expense";
       t.confirmed=false;
@@ -581,13 +588,23 @@ function groupUncategorized(items){
   Object.values(map).forEach(function(g){
     // Use server-suggested category if available (from upload)
     var serverSuggestion=null;
+    var bestConfidence=0;
+    var bestReason="";
+    var bestAlternatives=[];
     for(var i=0;i<g.transactions.length;i++){
       if(g.transactions[i].suggestedCategory&&g.transactions[i].suggestedCategory!=="Uncategorized"&&g.transactions[i].suggestedCategory!=="Pending Review"){
         serverSuggestion=g.transactions[i].suggestedCategory;
+        bestConfidence=g.transactions[i].confidence||0;
+        bestReason=g.transactions[i].reason||"";
+        bestAlternatives=g.transactions[i].alternatives||[];
         break;
       }
     }
     g.suggestion=serverSuggestion||smartSuggest(g.displayName,g.transactions);
+    g.confidence=bestConfidence;
+    g.confidenceLabel=bestConfidence>=0.85?"high":bestConfidence>=0.60?"medium":"low";
+    g.reason=bestReason;
+    g.alternatives=bestAlternatives;
   });
   // Sort groups by count descending (biggest groups first for efficiency)
   return Object.values(map).sort(function(a,b){return b.transactions.length-a.transactions.length});
@@ -804,6 +821,11 @@ function showBatchModal(){
             var isSelected=batchState.selected[g.key];
             var isExpanded=batchState.expanded[g.key];
             var hasSuggestion=g.suggestion!=null;
+            // Get confidence info from first transaction in group
+            var confLabel=g.confidenceLabel||"low";
+            var confReason=g.reason||"";
+            var confColor=confLabel==="high"?"var(--green)":confLabel==="medium"?"var(--amber)":"var(--dim)";
+            var alternatives=g.alternatives||[];
             return '<div class="group-card'+(isSelected?" selected":"")+'" data-gkey="'+g.key+'">'+
               '<div class="group-top" data-action="toggle">'+
                 '<div class="group-check'+(isSelected?" on":"")+'">&#10003;</div>'+
@@ -811,11 +833,14 @@ function showBatchModal(){
                   '<div class="group-name">'+escHtml(g.displayName)+'</div>'+
                   '<div class="group-meta">'+g.transactions.length+' transaction'+(g.transactions.length!==1?"s":"")+
                     (hasSuggestion?' &middot; <span style="color:var(--purple);font-weight:600">Suggested: '+g.suggestion+'</span>':'')+
+                    (hasSuggestion?' &middot; <span style="color:'+confColor+';font-weight:600;text-transform:uppercase;font-size:9px;letter-spacing:.5px">'+confLabel+'</span>':'')+
                   '</div>'+
+                  (confReason?'<div style="font-size:10px;color:var(--dim);margin-top:2px">'+escHtml(confReason)+'</div>':'')+
                 '</div>'+
                 '<div class="group-amt">-'+f(g.total)+'</div>'+
               '</div>'+
-              (hasSuggestion?'<div class="quick-accept" data-action="quickAccept" data-cat="'+g.suggestion+'" style="margin:8px 0 0 30px;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.25);cursor:pointer;font-size:11px;font-weight:600;color:var(--purple);transition:background .15s"><span style="font-size:13px">&#10003;</span> Accept as '+g.suggestion+'</div>':'')+
+              (hasSuggestion?'<div class="quick-accept" data-action="quickAccept" data-cat="'+g.suggestion+'" style="margin:8px 0 0 30px;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.25);cursor:pointer;font-size:11px;font-weight:600;color:var(--purple);transition:background .15s"><span style="font-size:13px">&#10003;</span> '+(confLabel==="high"?"Confirm":"Accept")+' as '+g.suggestion+'</div>':'')+
+              (alternatives.length>0?'<div style="margin:4px 0 0 30px;display:flex;gap:4px;flex-wrap:wrap">'+alternatives.map(function(alt){return'<div class="quick-accept" data-action="quickAccept" data-cat="'+alt+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--s1);border:1px solid var(--border);cursor:pointer;font-size:10px;font-weight:500;color:var(--muted)">'+alt+'</div>'}).join("")+'</div>':'')+
               (g.transactions.length>1?'<div class="group-expand" data-action="expand">'+(isExpanded?"Hide":"Show")+' '+g.transactions.length+' transactions</div>':'')+
               (isExpanded?'<div class="group-txns">'+g.transactions.map(function(t){
                 return '<div class="group-txn"><span class="txn-desc">'+escHtml(t.description)+'</span><span>'+t.date+'</span><span style="margin-left:8px;font-weight:600">-'+f(t.absAmount)+'</span></div>';
@@ -873,6 +898,7 @@ function bindBatchEvents(bg){
       batchState.groups.forEach(function(g){
         if(g.suggestion){
           g.transactions.forEach(function(t){
+            t.reviewStatus=t.suggestedCategory===g.suggestion?"confirmed":"corrected";
             t.category=g.suggestion;
             t.type=typeForCategory(g.suggestion);
             t.confirmed=true;
@@ -913,8 +939,8 @@ function bindBatchEvents(bg){
         showBatchModal();
       });
     }
-    var quickAcceptBtn=card.querySelector('[data-action="quickAccept"]');
-    if(quickAcceptBtn){
+    // All quick-accept buttons (primary suggestion + alternatives)
+    card.querySelectorAll('[data-action="quickAccept"]').forEach(function(quickAcceptBtn){
       quickAcceptBtn.addEventListener("click",function(e){
         e.stopPropagation();
         var cat=quickAcceptBtn.dataset.cat;
@@ -922,6 +948,7 @@ function bindBatchEvents(bg){
         if(group){
           var toLearn=[];
           group.transactions.forEach(function(t){
+            t.reviewStatus=t.suggestedCategory===cat?"confirmed":"corrected";
             t.category=cat;
             t.type=typeForCategory(cat);
             t.confirmed=true;
@@ -932,7 +959,7 @@ function bindBatchEvents(bg){
           showBatchModal();
         }
       });
-    }
+    });
   });
 
   // Apply button
@@ -945,6 +972,7 @@ function bindBatchEvents(bg){
     batchState.groups.forEach(function(g){
       if(batchState.selected[g.key]){
         g.transactions.forEach(function(t){
+          t.reviewStatus=t.suggestedCategory===cat?"confirmed":"corrected";
           t.category=cat;
           t.type=typeForCategory(cat);
           t.confirmed=true;
@@ -973,6 +1001,7 @@ function bindBatchEvents(bg){
         if(t.category==="Pending Review"&&t.suggestedCategory){
           t.category=t.suggestedCategory;
           t.type=t.suggestedType||typeForCategory(t.suggestedCategory);
+          t.reviewStatus="confirmed";
           t.confirmed=true;
         }
       });
@@ -1321,11 +1350,25 @@ function breakdownView(){
     html2+='<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>No data yet</h2><p>Upload a bank statement in the Upload tab to see your spending breakdown here.</p></div>';
     return html2;
   }
+
+  // Recalculate analysis to ensure it's up-to-date with confirmed categories
+  recalcAnalysis();
   var a=D.analysis;
   var cats=a.categoryBreakdown;
   var ti=a.totalIncome,ts=a.totalExpenses;
 
+  // Count confirmed vs pending
+  var confirmedCount=D.transactions.filter(function(t){return t.confirmed===true&&t.type==="Expense"}).length;
+  var pendingCount=D.transactions.filter(function(t){return t.confirmed===false&&t.type!=="Non-Transactional"}).length;
+
   var html=hubBackBtn("Spending Breakdown");
+
+  // Data status banner
+  if(pendingCount>0){
+    html+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--amber)">'+pendingCount+' transaction'+(pendingCount!==1?'s':'')+' pending review</strong> — showing suggested categories. <span style="color:var(--amber);cursor:pointer;text-decoration:underline" id="reviewFromBreakdown">Review now</span></div>';
+  }else if(confirmedCount>0){
+    html+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--green)">All transactions confirmed</strong> — data synced to your financial hub</div>';
+  }
 
   // Spend ratio
   html+='<div class="kgrid fi">'+
@@ -1571,6 +1614,19 @@ async function hubDelete(collection,id){
 function moreView(){
   if(hubSection)return hubSectionView(hubSection);
   var html='<div class="head fi"><h1>Financial Hub</h1><div class="live"></div></div>';
+
+  // Show synced data status if transactions are loaded
+  if(hasData()){
+    var confirmed=D.transactions.filter(function(t){return t.confirmed!==false}).length;
+    var total=D.transactions.length;
+    var pending=total-confirmed;
+    if(pending>0){
+      html+='<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--amber)">'+confirmed+'/'+total+' transactions confirmed</strong> — categorised data is synced to hub sections below</div>';
+    }else{
+      html+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--green)">'+total+' transactions synced</strong> — all categories confirmed and reflected below</div>';
+    }
+  }
+
   html+='<div class="hub-menu fi">';
   var items=[
     {key:"spending",name:"Spending",sub:"Category breakdown",icon:"&#128176;",bg:"var(--rbg)",color:"var(--red)"},
@@ -1620,6 +1676,12 @@ function bindHubEvents(){
   // Back button
   var back=document.getElementById("hubBack");
   if(back)back.addEventListener("click",function(){hubSection=null;render()});
+  // Review from breakdown link
+  var reviewLink=document.getElementById("reviewFromBreakdown");
+  if(reviewLink)reviewLink.addEventListener("click",function(e){
+    e.preventDefault();
+    openReviewWizard();
+  });
   // Bind section-specific events
   if(hubSection==="income")bindIncomeEvents();
   if(hubSection==="budget")bindBudgetEvents();
@@ -1633,7 +1695,12 @@ function bindHubEvents(){
 }
 
 async function loadHubSection(section){
-  if(section==="spending"){render();return}
+  if(section==="spending"){
+    // Ensure analysis is fresh when viewing spending breakdown
+    if(D&&D.transactions)recalcAnalysis();
+    render();
+    return;
+  }
   var a=document.getElementById("app");
   a.innerHTML='<div style="text-align:center;padding:60px 0"><div style="width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px"></div><p style="color:var(--muted);font-size:13px">Loading...</p></div>';
   await hubLoad(section);
@@ -1648,13 +1715,29 @@ function incomeView(){
   var items=data.items||[];
   var html=hubBackBtn("Income Tracker");
 
+  // Also show income detected from transactions
+  var txnIncome=0;
+  if(D&&D.transactions){
+    var confirmedIncome=D.transactions.filter(function(t){return t.confirmed!==false&&t.type==="Income"});
+    txnIncome=confirmedIncome.reduce(function(s,t){return s+t.absAmount},0);
+  }
+
   // Summary
   var totalMonthly=items.filter(function(i){return i.frequency==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   html+='<div class="summary-grid fi">';
   html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
   html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalAll)+'</div><div class="ss-label">All Sources</div></div>';
+  if(txnIncome>0){
+    html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(txnIncome)+'</div><div class="ss-label">From Statements</div></div>';
+  }
   html+='</div>';
+
+  // Show auto-detected sources
+  var uploadSources=items.filter(function(i){return i.source==="upload"});
+  if(uploadSources.length>0){
+    html+='<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--green)">'+uploadSources.length+' income source'+(uploadSources.length!==1?'s':'')+' auto-detected</strong> from your uploaded bank statement</div>';
+  }
 
   // Add form
   html+='<div class="ccard fi"><h3>Add Income Source</h3>';
@@ -1671,7 +1754,7 @@ function incomeView(){
     html+='<div class="sec fi"><div class="stitle">Income Sources</div>';
     items.forEach(function(it){
       var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
-      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type)+' &middot; '+escHtml(it.frequency||"monthly")+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type)+' &middot; '+escHtml(it.frequency||"monthly")+(it.source==="upload"?' &middot; <span style="color:var(--green)">From statement</span>':'')+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
     });
     html+='</div>';
   }
@@ -1710,6 +1793,12 @@ function budgetView(){
     else{totalPlanned+=parseFloat(it.planned||0);totalActual+=parseFloat(it.actual||0)}
   });
   var diff=totalExpected-totalActual;
+
+  // Show auto-sync info
+  var uploadLines=items.filter(function(i){return i.source==="upload"});
+  if(uploadLines.length>0){
+    html+='<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--purple)">'+uploadLines.length+' budget line'+(uploadLines.length!==1?'s':'')+' auto-populated</strong> with actual spending from your confirmed transactions</div>';
+  }
 
   html+='<div class="summary-grid fi">';
   html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalExpected)+'</div><div class="ss-label">Expected Income</div></div>';
@@ -1776,6 +1865,13 @@ function subscriptionsView(){
   var items=data.items||[];
   var html=hubBackBtn("Subscriptions");
 
+  // Also check for subscription spending from confirmed transactions
+  var txnSubTotal=0;
+  if(D&&D.transactions){
+    var confirmedSubs=D.transactions.filter(function(t){return t.confirmed!==false&&t.category==="Subscriptions"});
+    txnSubTotal=confirmedSubs.reduce(function(s,t){return s+t.absAmount},0);
+  }
+
   // Summary
   var totalActive=items.filter(function(i){return i.status==="active"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
@@ -1786,6 +1882,9 @@ function subscriptionsView(){
   html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeCount+'</div><div class="ss-label">Active Subscriptions</div></div>';
   html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActive*12)+'</div><div class="ss-label">Yearly Cost</div></div>';
   html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.2)"><div class="ss-val" style="color:var(--purple)">'+items.length+'</div><div class="ss-label">Total Tracked</div></div>';
+  if(txnSubTotal>0){
+    html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(txnSubTotal)+'</div><div class="ss-label">From Statements</div></div>';
+  }
   html+='</div>';
 
   // Show transactions detected from upload
@@ -2325,7 +2424,7 @@ async function loadTransactionsFromBlobs(){
   return false;
 }
 
-// ───────── SYNC TRANSACTIONS TO HUB (bills, subscriptions, etc.) ─────────
+// ───────── SYNC TRANSACTIONS TO HUB (bills, subscriptions, income, budget, etc.) ─────────
 async function syncTransactionsToHub(){
   if(!D||!D.transactions)return;
   var confirmed=D.transactions.filter(function(t){return t.confirmed!==false});
@@ -2354,6 +2453,19 @@ async function syncTransactionsToHub(){
     subGroups[key].total+=t.absAmount;
     subGroups[key].count++;
     subGroups[key].amounts.push(t.absAmount);
+  });
+
+  // Extract income sources
+  var incomeTxns=confirmed.filter(function(t){return t.type==="Income"});
+  var incomeGroups={};
+  incomeTxns.forEach(function(t){
+    var key=normalizeDesc(t.description);
+    if(!incomeGroups[key]){
+      incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.category};
+    }
+    incomeGroups[key].total+=t.absAmount;
+    incomeGroups[key].count++;
+    incomeGroups[key].amounts.push(t.absAmount);
   });
 
   // Sync bills to hub
@@ -2390,6 +2502,69 @@ async function syncTransactionsToHub(){
         });
       }
     }
+  }catch(e){/* silent */}
+
+  // Sync income sources to hub
+  try{
+    var existingIncome=await fetch("/api/hub-data?collection=income").then(function(r){return r.json()});
+    var existingIncomeNames=(existingIncome.items||[]).map(function(i){return normalizeDesc(i.name)});
+
+    for(var ik in incomeGroups){
+      var ig=incomeGroups[ik];
+      if(existingIncomeNames.indexOf(ik)===-1){
+        var avgIncAmt=Math.round(ig.total/ig.count*100)/100;
+        var incType=ig.category==="Income"?"Salary":"Irregular Income";
+        if(ig.name.toLowerCase().match(/freelance|invoice|contract/))incType="Freelance Income";
+        if(ig.name.toLowerCase().match(/refund|cashback|reversal/))incType="Irregular Income";
+        if(ig.name.toLowerCase().match(/interest|dividend/))incType="Passive Income";
+        var freq=ig.count>=2?"monthly":"one-off";
+        await fetch("/api/hub-data?collection=income",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"add",item:{name:ig.name,type:incType,amount:avgIncAmt,frequency:freq,source:"upload"}})
+        });
+      }
+    }
+  }catch(e){/* silent */}
+
+  // Sync budget actuals from confirmed expense categories
+  try{
+    var existingBudget=await fetch("/api/hub-data?collection=budget").then(function(r){return r.json()});
+    var existingBudgetCats=(existingBudget.items||[]).map(function(b){return b.category?b.category.toLowerCase():""});
+    var curMonth=new Date().toISOString().slice(0,7);
+
+    // Build category totals from confirmed expenses
+    var catTotals={};
+    confirmed.filter(function(t){return t.type==="Expense"}).forEach(function(t){
+      if(!catTotals[t.category])catTotals[t.category]=0;
+      catTotals[t.category]+=t.absAmount;
+    });
+
+    // Update existing budget lines with actual amounts or add new ones
+    for(var cat in catTotals){
+      if(cat==="Uncategorized"||cat==="Pending Review")continue;
+      var actual=Math.round(catTotals[cat]*100)/100;
+      var existingLine=(existingBudget.items||[]).find(function(b){return b.category&&b.category.toLowerCase()===cat.toLowerCase()&&b.month===curMonth});
+      if(existingLine){
+        existingLine.actual=actual;
+        await fetch("/api/hub-data?collection=budget",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"update",item:existingLine})
+        });
+      }else if(existingBudgetCats.indexOf(cat.toLowerCase())===-1){
+        await fetch("/api/hub-data?collection=budget",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"add",item:{category:cat,budgetType:"expense",planned:0,actual:actual,month:curMonth,source:"upload"}})
+        });
+      }
+    }
+  }catch(e){/* silent */}
+
+  // Reload hub caches that were updated
+  try{
+    await Promise.all([hubLoad("bills"),hubLoad("subscriptions"),hubLoad("income"),hubLoad("budget")]);
   }catch(e){/* silent */}
 }
 
