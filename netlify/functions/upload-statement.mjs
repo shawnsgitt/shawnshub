@@ -1,5 +1,9 @@
 import { getStore } from "@netlify/blobs";
 import { PDFParse } from "pdf-parse";
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
+
+// Pre-load the PDF.js worker to avoid dynamic import issues in serverless environments
+globalThis.pdfjsWorker = pdfjsWorker;
 
 // Category keywords for auto-categorization
 const CATEGORY_RULES = [
