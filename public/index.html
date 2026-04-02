@@ -2137,9 +2137,9 @@ function incomeView(){
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
   // ─── SECTION 1: Detected from statements ───
+  html+='<div class="section-block detected fi">';
+  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
   if(detected.length>0){
-    html+='<div class="section-block detected fi">';
-    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
     html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These income sources were found in your uploaded statements. Review and confirm to start tracking them.</div>';
     html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Income Detected</div></div>';
@@ -2178,8 +2178,10 @@ function incomeView(){
       });
       html+='</div>';
     }
-    html+='</div>';
+  } else {
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected income sources from statements yet. Upload a bank statement to automatically detect recurring income.</div>';
   }
+  html+='</div>';
 
   // ─── SECTION 2: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
@@ -2399,9 +2401,9 @@ function subscriptionsView(){
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
   // ─── SECTION 1: Detected from statements ───
+  html+='<div class="section-block detected fi">';
+  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
   if(detected.length>0){
-    html+='<div class="section-block detected fi">';
-    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
     html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring or likely subscription payments were found in your statements. Review and confirm to start tracking them.</div>';
     html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Spend Detected</div></div>';
@@ -2440,8 +2442,10 @@ function subscriptionsView(){
       });
       html+='</div>';
     }
-    html+='</div>';
+  } else {
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected subscriptions from statements yet. Upload a bank statement to automatically detect recurring payments.</div>';
   }
+  html+='</div>';
 
   // ─── SECTION 2: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
@@ -2818,9 +2822,9 @@ function billsView(){
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
   // ─── SECTION 1: Detected from statements ───
+  html+='<div class="section-block detected fi">';
+  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
   if(detected.length>0){
-    html+='<div class="section-block detected fi">';
-    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
     html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring bill-like payments were found in your statements. Review and confirm to start tracking due dates and totals.</div>';
     html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Bills Detected</div></div>';
@@ -2858,8 +2862,10 @@ function billsView(){
       });
       html+='</div>';
     }
-    html+='</div>';
+  } else {
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected bills from statements yet. Upload a bank statement to automatically detect recurring bill payments.</div>';
   }
+  html+='</div>';
 
   // ─── SECTION 2: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
