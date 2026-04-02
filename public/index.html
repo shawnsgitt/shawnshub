@@ -51,7 +51,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Ro
 .ramt{font-size:13px;font-weight:700}
 .rbar{width:100%;height:4px;background:var(--border);border-radius:2px;margin-top:5px}
 .rbar span{display:block;height:4px;border-radius:2px;transition:width .8s ease}
-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-top:1px solid var(--border);display:flex;justify-content:center;gap:20px;padding:10px 0 max(env(safe-area-inset-bottom),10px);z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-top:1px solid var(--border);display:flex;justify-content:center;gap:14px;padding:10px 0 max(env(safe-area-inset-bottom),10px);z-index:10;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .ni{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim);font-size:10px;font-weight:500;cursor:pointer;transition:color .15s;-webkit-tap-highlight-color:transparent}
 .ni.on{color:var(--purple)}
 .ni svg{width:20px;height:20px}
@@ -242,6 +242,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 <div class="ni" data-v="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Overview</span></div>
 <div class="ni" data-v="transactions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>Transactions</span></div>
 <div class="ni" data-v="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>More</span></div>
+<div class="ni" data-v="tracker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg><span>Tracker</span></div>
 </nav>
 
 <script>
@@ -253,6 +254,7 @@ function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
 
 var D=null,charts={},cv="home",selAcct="all",selMonth=null;
 var hubSection=null; // tracks which "more" sub-section is active
+var trackerSection=null; // tracks which "tracker" sub-section is active
 var hubCache={}; // in-memory cache of hub data loaded from API
 var hubForms={}; // tracks form states
 
@@ -260,11 +262,16 @@ document.querySelectorAll(".ni").forEach(function(el){
   el.addEventListener("click",function(){
     cv=el.dataset.v;
     if(cv!=="more")hubSection=null;
+    if(cv!=="tracker")trackerSection=null;
     document.querySelectorAll(".ni").forEach(function(e){e.classList.toggle("on",e.dataset.v===cv)});
     // Close any open modal when navigating
     var openModal=document.querySelector(".modal-bg");
     if(openModal){openModal.remove();recalcAnalysis();}
     destroyCharts();render();
+    // Pre-load tracker data so pending counts are visible on main Tracker view
+    if(cv==="tracker"&&!trackerSection){
+      Promise.all([hubLoad("subscriptions"),hubLoad("income"),hubLoad("bills")]).then(function(){render()});
+    }
   });
 });
 
@@ -350,6 +357,7 @@ function render(){
   else if(cv==="overview")a.innerHTML=dashboardView();
   else if(cv==="transactions")a.innerHTML=txnView();
   else if(cv==="more")a.innerHTML=moreView();
+  else if(cv==="tracker")a.innerHTML=trackerView();
   initCharts();
   bindUpload();
   bindUncatClicks();
@@ -357,6 +365,7 @@ function render(){
   bindMonthSelector();
   bindTxnEvents();
   bindHubEvents();
+  bindTrackerEvents();
 }
 
 // ───────── HOME / FINANCIAL SNAPSHOT ─────────
@@ -880,8 +889,10 @@ async function doUpload(file){
     // Store parseStats for dashboard display
     data.parseStats=data.parseStats||null;
     D=data;
+    if(!D.analysis)D.analysis={};
     selMonth=null;
     buildAccounts();
+    recalcAnalysis();
     // Build and show import summary
     var summaryMsg=data.transactions.length+" transactions ready for review";
     if(data.parseStats){
@@ -1372,6 +1383,7 @@ function bindBatchEvents(bg){
 
 function recalcAnalysis(){
   if(!D||!D.transactions)return;
+  if(!D.analysis)D.analysis={};
   buildAccounts();
   var txns=D.transactions.filter(function(t){return !t.account||t.account.toLowerCase().indexOf("remittance")===-1});
   var totalIncome=0,totalExpenses=0,totalSavings=0;
@@ -1596,6 +1608,7 @@ function openCategoryModal(txn){
 // ───────── DASHBOARD VIEW ─────────
 function dashboardView(){
   if(!hasData())return emptyState("Dashboard");
+  if(!D.analysis||!D.analysis.categoryBreakdown)recalcAnalysis();
   var a=D.analysis;
   var ti=a.totalIncome,ts=a.totalExpenses,tsv=a.totalSavings,net=a.net;
   var cats=a.categoryBreakdown;
@@ -1786,6 +1799,7 @@ function breakdownView(){
 // ───────── INSIGHTS VIEW ─────────
 function insightsView(){
   if(!hasData())return emptyState("Insights");
+  if(!D.analysis||!D.analysis.categoryBreakdown)recalcAnalysis();
   var a=D.analysis;
   var recs=a.recommendations||[];
 
@@ -1990,6 +2004,486 @@ async function hubDelete(collection,id){
   }catch(e){toast(e.message,true)}
 }
 
+// ───────── TRACKER VIEW ─────────
+function trackerView(){
+  if(trackerSection)return trackerSectionView(trackerSection);
+  var html='<div class="head fi"><h1>Tracker</h1><div class="live"></div></div>';
+  html+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi">Confirmed items from uploaded bank statements are automatically synced here.</div>';
+
+  // Count pending detected items per collection
+  var subDetected=((hubCache["subscriptions"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus==="detected"}).length;
+  var incDetected=((hubCache["income"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus==="detected"}).length;
+  var billDetected=((hubCache["bills"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus==="detected"}).length;
+  var totalDetected=subDetected+incDetected+billDetected;
+  if(totalDetected>0){
+    html+='<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--purple)">'+totalDetected+' item'+(totalDetected!==1?'s':'')+' detected</strong> from your uploaded statements &mdash; review and confirm to start tracking.</div>';
+  }
+
+  html+='<div class="hub-menu fi">';
+  var menuItems=[
+    {key:"tracker-subscriptions",name:"Subscriptions",sub:"Confirmed recurring services",icon:"&#128257;",bg:"rgba(6,182,212,.1)",color:"var(--cyan)",pending:subDetected},
+    {key:"tracker-income",name:"Income",sub:"Confirmed income sources",icon:"&#128178;",bg:"var(--gbg)",color:"var(--green)",pending:incDetected},
+    {key:"tracker-bills",name:"Bills & Due Dates",sub:"Confirmed bills & payments",icon:"&#128197;",bg:"rgba(6,182,212,.1)",color:"var(--cyan)",pending:billDetected}
+  ];
+  menuItems.forEach(function(it){
+    var badge=it.pending>0?' <span style="display:inline-block;background:var(--purple);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:6px">'+it.pending+' new</span>':'';
+    html+='<div class="hub-item" data-tracker="'+it.key+'"><div class="hi-icon" style="background:'+it.bg+';color:'+it.color+'">'+it.icon+'</div><div class="hi-info"><div class="hi-name">'+it.name+badge+'</div><div class="hi-sub">'+it.sub+'</div></div></div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function trackerSectionView(section){
+  if(section==="tracker-subscriptions")return trackerSubscriptionsView();
+  if(section==="tracker-income")return trackerIncomeView();
+  if(section==="tracker-bills")return trackerBillsView();
+  return trackerView();
+}
+
+function trackerBackBtn(title){
+  return'<div class="back-btn" id="trackerBack">&#8592; Back to Tracker</div><div class="head fi"><h1>'+title+'</h1></div>';
+}
+
+async function loadTrackerSection(section){
+  var collection=section==="tracker-subscriptions"?"subscriptions":section==="tracker-income"?"income":"bills";
+  var a=document.getElementById("app");
+  a.innerHTML='<div style="text-align:center;padding:60px 0"><div style="width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px"></div><p style="color:var(--muted);font-size:13px">Loading...</p></div>';
+  await hubLoad(collection);
+  render();
+}
+
+// ─── Tracker: Subscriptions (confirmed only) ───
+function trackerSubscriptionsView(){
+  var data=hubCache["subscriptions"]||{items:[]};
+  var items=data.items||[];
+  var html=trackerBackBtn("Subscriptions");
+
+  var confirmed=items.filter(function(i){return i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var activeConfirmed=confirmed.filter(function(i){return i.status==="active"});
+  var inactiveConfirmed=confirmed.filter(function(i){return i.status!=="active"});
+  var totalActiveMonthly=activeConfirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+
+  html+='<div style="background:rgba(6,182,212,.06);border:1px solid rgba(6,182,212,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi">Showing confirmed subscriptions from uploaded bank statements only.</div>';
+
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActiveMonthly)+'</div><div class="ss-label">Active Monthly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeConfirmed.length+'</div><div class="ss-label">Active Subscriptions</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActiveMonthly*12)+'</div><div class="ss-label">Estimated Yearly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+confirmed.length+'</div><div class="ss-label">Total Tracked</div></div>';
+  html+='</div>';
+  if(activeConfirmed.length>0){
+    html+='<div class="stitle">Active Subscriptions</div>';
+    activeConfirmed.forEach(function(it){
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--cyan)">'+f(it.amount)+'</div><div class="status-pill paid">active</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-toggle-sub="'+it.id+'">Pause</button><button class="btn-sm btn-danger" data-tracker-del-sub="'+it.id+'">Remove</button></div></div>';
+    });
+  }
+  if(inactiveConfirmed.length>0){
+    html+='<div class="stitle">Paused / Cancelled</div>';
+    inactiveConfirmed.forEach(function(it){
+      var statusClass=it.status==="paused"?"pending":"overdue";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--dim)">'+f(it.amount)+'</div><div class="status-pill '+statusClass+'">'+it.status+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-toggle-sub="'+it.id+'">Reactivate</button><button class="btn-sm btn-danger" data-tracker-del-sub="'+it.id+'">Remove</button></div></div>';
+    });
+  }
+  if(confirmed.length===0){
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No confirmed subscriptions yet.<br>Upload a bank statement and confirm detected subscriptions to see them here.</div>';
+  }
+  html+='</div>';
+
+  // ─── Detected Items (Pending Review) ───
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
+  if(detected.length>0||dismissed.length>0){
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128270;</span> Detected from Statements</div>';
+    if(detected.length>0){
+      html+='<div style="background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--muted)">'+detected.length+' possible subscription'+(detected.length!==1?'s':'')+' detected. Review and confirm to add to your tracker.</div>';
+      detected.forEach(function(it){
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+(it.confidence?'<span style="color:var(--purple)">'+it.confidence+' confidence</span> &middot; ':'')+escHtml(it.frequency||"Monthly")+' &middot; '+(it.occurrences||0)+' occurrence'+(it.occurrences!==1?'s':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-primary" data-tracker-confirm-sub="'+it.id+'">Confirm</button><button class="btn-sm btn-edit" data-tracker-edit-sub="'+it.id+'">Edit & Confirm</button><button class="btn-sm btn-danger" data-tracker-dismiss-sub="'+it.id+'">Dismiss</button></div></div>';
+      });
+    }
+    if(dismissed.length>0){
+      html+='<details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">'+dismissed.length+' dismissed item'+(dismissed.length!==1?'s':'')+'</summary>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+f(it.amount)+' &middot; '+escHtml(it.frequency||"Monthly")+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-restore-sub="'+it.id+'">Restore</button></div></div>';
+      });
+      html+='</details>';
+    }
+    html+='</div>';
+  }
+
+  return html;
+}
+
+// ─── Tracker: Income (confirmed only) ───
+function trackerIncomeView(){
+  var data=hubCache["income"]||{items:[]};
+  var items=data.items||[];
+  var html=trackerBackBtn("Income");
+
+  var confirmed=items.filter(function(i){return i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var confirmedMonthly=confirmed.filter(function(i){return(i.frequency||"monthly").toLowerCase()==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+
+  html+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi">Showing confirmed income sources from uploaded bank statements only.</div>';
+
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+confirmed.length+'</div><div class="ss-label">Confirmed Sources</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(confirmedMonthly*12)+'</div><div class="ss-label">Estimated Yearly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(confirmedTotal)+'</div><div class="ss-label">All Confirmed Sources</div></div>';
+  html+='</div>';
+  if(confirmed.length>0){
+    confirmed.forEach(function(it){
+      var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-danger" data-tracker-del-income="'+it.id+'">Remove</button></div></div>';
+    });
+  } else {
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No confirmed income sources yet.<br>Upload a bank statement and confirm detected income to see them here.</div>';
+  }
+  html+='</div>';
+
+  // ─── Detected Items (Pending Review) ───
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
+  if(detected.length>0||dismissed.length>0){
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128270;</span> Detected from Statements</div>';
+    if(detected.length>0){
+      html+='<div style="background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--muted)">'+detected.length+' possible income source'+(detected.length!==1?'s':'')+' detected. Review and confirm to add to your tracker.</div>';
+      detected.forEach(function(it){
+        var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+(it.confidence?'<span style="color:var(--purple)">'+it.confidence+' confidence</span> &middot; ':'')+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly")+' &middot; '+(it.occurrences||0)+' occurrence'+(it.occurrences!==1?'s':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-primary" data-tracker-confirm-income="'+it.id+'">Confirm</button><button class="btn-sm btn-edit" data-tracker-edit-income="'+it.id+'">Edit & Confirm</button><button class="btn-sm btn-danger" data-tracker-dismiss-income="'+it.id+'">Dismiss</button></div></div>';
+      });
+    }
+    if(dismissed.length>0){
+      html+='<details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">'+dismissed.length+' dismissed item'+(dismissed.length!==1?'s':'')+'</summary>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+f(it.amount)+' &middot; '+escHtml(it.type||"Income")+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-restore-income="'+it.id+'">Restore</button></div></div>';
+      });
+      html+='</details>';
+    }
+    html+='</div>';
+  }
+
+  return html;
+}
+
+// ─── Tracker: Bills & Due Dates (confirmed only) ───
+function trackerBillsView(){
+  var data=hubCache["bills"]||{items:[]};
+  var items=data.items||[];
+  var html=trackerBackBtn("Bills & Due Dates");
+
+  var confirmed=items.filter(function(i){return i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var today=new Date().getDate();
+  var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var overdue=confirmed.filter(function(i){return getBillStatus(i)==="overdue"}).length;
+  var upcoming=confirmed.filter(function(i){
+    var due=parseInt(i.dueDate)||0;
+    return due>=today&&due<=today+7&&getBillStatus(i)!=="paid";
+  });
+
+  html+='<div style="background:rgba(6,182,212,.06);border:1px solid rgba(6,182,212,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi">Showing confirmed bills from uploaded bank statements only.</div>';
+
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedTotal)+'</div><div class="ss-label">Confirmed Monthly Bills</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+upcoming.length+'</div><div class="ss-label">Upcoming Due</div></div>';
+  html+='<div class="summary-stat" style="border-color:'+(overdue>0?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)")+'"><div class="ss-val" style="color:'+(overdue>0?"var(--red)":"var(--green)")+'">'+(overdue>0?overdue+" overdue":"All good")+'</div><div class="ss-label">Status</div></div>';
+  html+='</div>';
+
+  var overdueItems=confirmed.filter(function(i){return getBillStatus(i)==="overdue"});
+  var upcomingItems=confirmed.filter(function(i){return getBillStatus(i)==="pending"});
+  var paidItems=confirmed.filter(function(i){return getBillStatus(i)==="paid"});
+
+  if(overdueItems.length>0){
+    html+='<div class="stitle" style="color:var(--red)">Overdue Bills</div>';
+    overdueItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderTrackerBillCard(it);
+    });
+  }
+  if(upcomingItems.length>0){
+    html+='<div class="stitle">Upcoming Confirmed Bills</div>';
+    upcomingItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderTrackerBillCard(it);
+    });
+  }
+  if(paidItems.length>0){
+    html+='<div class="stitle" style="color:var(--green)">Paid This Month</div>';
+    paidItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderTrackerBillCard(it);
+    });
+  }
+  if(confirmed.length===0){
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No confirmed bills yet.<br>Upload a bank statement and confirm detected bills to see them here.</div>';
+  }
+  html+='</div>';
+
+  // ─── Detected Items (Pending Review) ───
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
+  if(detected.length>0||dismissed.length>0){
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128270;</span> Detected from Statements</div>';
+    if(detected.length>0){
+      html+='<div style="background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.15);border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:var(--muted)">'+detected.length+' possible bill'+(detected.length!==1?'s':'')+' detected. Review and confirm to add to your tracker.</div>';
+      detected.forEach(function(it){
+        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+(it.confidence?'<span style="color:var(--purple)">'+it.confidence+' confidence</span> &middot; ':'')+escHtml(it.frequency||"Monthly")+' &middot; '+(it.occurrences||0)+' occurrence'+(it.occurrences!==1?'s':'')+(it.lastPaidDate?' &middot; Last: '+it.lastPaidDate:'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-primary" data-tracker-confirm-bill="'+it.id+'">Confirm</button><button class="btn-sm btn-edit" data-tracker-edit-bill="'+it.id+'">Edit & Confirm</button><button class="btn-sm btn-danger" data-tracker-dismiss-bill="'+it.id+'">Dismiss</button></div></div>';
+      });
+    }
+    if(dismissed.length>0){
+      html+='<details style="margin-top:8px"><summary style="font-size:11px;color:var(--dim);cursor:pointer">'+dismissed.length+' dismissed item'+(dismissed.length!==1?'s':'')+'</summary>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+f(it.amount)+' &middot; '+escHtml(it.frequency||"Monthly")+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-restore-bill="'+it.id+'">Restore</button></div></div>';
+      });
+      html+='</details>';
+    }
+    html+='</div>';
+  }
+
+  return html;
+}
+
+function renderTrackerBillCard(it){
+  var status=it.status||"pending";
+  var html='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">Due: day '+(it.dueDate||"?")+ ' &middot; '+escHtml(it.method||"Manual")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700">'+f(it.amount)+'</div><div class="status-pill '+status+'">'+status+'</div></div></div>';
+  html+='<div class="item-actions"><button class="btn-sm btn-edit" data-tracker-toggle-bill="'+it.id+'">Toggle Status</button><button class="btn-sm btn-danger" data-tracker-del-bill="'+it.id+'">Remove</button></div></div>';
+  return html;
+}
+
+// ─── Tracker Event Bindings ───
+function bindTrackerEvents(){
+  // Tracker menu items
+  document.querySelectorAll("[data-tracker]").forEach(function(el){
+    el.addEventListener("click",function(){
+      trackerSection=el.dataset.tracker;
+      loadTrackerSection(trackerSection);
+    });
+  });
+  // Back button
+  var back=document.getElementById("trackerBack");
+  if(back)back.addEventListener("click",function(){trackerSection=null;render()});
+
+  // Tracker subscriptions events
+  document.querySelectorAll("[data-tracker-toggle-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerToggleSub});
+      if(!item)return;
+      b.disabled=true;
+      item.status=item.status==="active"?"paused":"active";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast(item.status==="active"?"Subscription reactivated":"Subscription paused");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-del-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      if(!confirm("Remove this subscription from tracker?"))return;
+      b.disabled=true;
+      await hubDelete("subscriptions",b.dataset.trackerDelSub);
+      await hubLoad("subscriptions");toast("Subscription removed");render();
+    });
+  });
+
+  // Tracker income events
+  document.querySelectorAll("[data-tracker-del-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      if(!confirm("Remove this income source from tracker?"))return;
+      b.disabled=true;
+      await hubDelete("income",b.dataset.trackerDelIncome);
+      await hubLoad("income");toast("Income source removed");render();
+    });
+  });
+
+  // Tracker bills events
+  document.querySelectorAll("[data-tracker-toggle-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerToggleBill});
+      if(!item)return;
+      b.disabled=true;
+      var cycle={"pending":"paid","paid":"overdue","overdue":"pending"};
+      item.status=cycle[item.status||"pending"]||"pending";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Bill status updated to "+item.status);render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-del-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      if(!confirm("Remove this bill from tracker?"))return;
+      b.disabled=true;
+      await hubDelete("bills",b.dataset.trackerDelBill);
+      await hubLoad("bills");toast("Bill removed");render();
+    });
+  });
+
+  // ─── Tracker: Confirm/Edit/Dismiss/Restore detected subscriptions ───
+  document.querySelectorAll("[data-tracker-confirm-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerConfirmSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      item.status="active";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Subscription confirmed and now tracked");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-edit-sub]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerEditSub});
+      if(!item)return;
+      var newName=prompt("Subscription name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.detectionStatus="edited_confirmed";
+      item.status="active";
+      hubUpdate("subscriptions",item).then(function(){hubLoad("subscriptions").then(function(){toast("Subscription edited and confirmed");render()})});
+    });
+  });
+  document.querySelectorAll("[data-tracker-dismiss-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerDismissSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Dismissed");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-restore-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerRestoreSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Restored for review");render();
+    });
+  });
+
+  // ─── Tracker: Confirm/Edit/Dismiss/Restore detected income ───
+  document.querySelectorAll("[data-tracker-confirm-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerConfirmIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Income source confirmed and now tracked");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-edit-income]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerEditIncome});
+      if(!item)return;
+      var newName=prompt("Source name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.detectionStatus="edited_confirmed";
+      hubUpdate("income",item).then(function(){hubLoad("income").then(function(){toast("Income source edited and confirmed");render()})});
+    });
+  });
+  document.querySelectorAll("[data-tracker-dismiss-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerDismissIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Dismissed");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-restore-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerRestoreIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Restored for review");render();
+    });
+  });
+
+  // ─── Tracker: Confirm/Edit/Dismiss/Restore detected bills ───
+  document.querySelectorAll("[data-tracker-confirm-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerConfirmBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Bill confirmed and now tracked");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-edit-bill]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerEditBill});
+      if(!item)return;
+      var newName=prompt("Bill name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      var newDue=prompt("Due date (day of month, 1-31):",item.dueDate||"");
+      if(newDue===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.dueDate=newDue||item.dueDate;
+      item.detectionStatus="edited_confirmed";
+      hubUpdate("bills",item).then(function(){hubLoad("bills").then(function(){toast("Bill edited and confirmed");render()})});
+    });
+  });
+  document.querySelectorAll("[data-tracker-dismiss-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerDismissBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Dismissed");render();
+    });
+  });
+  document.querySelectorAll("[data-tracker-restore-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.trackerRestoreBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Restored for review");render();
+    });
+  });
+}
+
 // ───────── MORE / HUB MENU VIEW ─────────
 function moreView(){
   if(hubSection)return hubSectionView(hubSection);
@@ -2131,65 +2625,15 @@ function estimateNextDate(lastDate,frequency){
 function incomeView(){
   var data=hubCache["income"]||{items:[]};
   var items=data.items||[];
-  var html=hubBackBtn("Income Tracker");
+  var html=hubBackBtn("Income");
 
-  // Separate items by detection state
-  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  // Only show manually-added and confirmed items (no detected items section)
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
-  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
 
   var confirmedMonthly=confirmed.filter(function(i){return(i.frequency||"monthly").toLowerCase()==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── SECTION 1: Detected from statements ───
-  html+='<div class="section-block detected fi">';
-  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
-  if(detected.length>0){
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These income sources were found in your uploaded statements. Review and confirm to start tracking them.</div>';
-    html+='<div class="summary-grid">';
-    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Income Detected</div></div>';
-    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Sources</div></div>';
-    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
-    html+='</div>';
-    detected.forEach(function(it){
-      var conf=it.confidence||"Medium";
-      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
-      var nextDate=estimateNextDate(it.lastReceivedDate||it.lastDate||"",it.frequency);
-      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
-      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
-      html+='<div class="item-detail">'+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly");
-      if(it.lastReceivedDate||it.lastDate)html+=' &middot; Last received: '+escHtml(it.lastReceivedDate||it.lastDate);
-      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
-      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
-      html+='</div>';
-      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
-      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
-      html+='</div>';
-      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
-      html+='<button class="btn-sm btn-edit" data-confirm-income="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
-      html+='<button class="btn-sm btn-edit" data-edit-detected-income="'+it.id+'">Edit</button>';
-      html+='<button class="btn-sm" data-dismiss-income="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
-      html+='<button class="btn-sm" data-notrelevant-income="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
-      html+='</div></div>';
-    });
-    // Dismissed items inside detected block
-    if(dismissed.length>0){
-      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
-      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
-      dismissed.forEach(function(it){
-        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-        html+='<div class="item-actions"><button class="btn-sm" data-restore-income="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Delete</button></div></div>';
-      });
-      html+='</div>';
-    }
-  } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected income sources from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
-  }
-  html+='</div>';
-
-  // ─── SECTION 2: Confirmed & Tracked ───
+  // ─── SECTION 1: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
   html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
   html+='<div class="summary-grid">';
@@ -2205,11 +2649,11 @@ function incomeView(){
       html+='<div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
     });
   } else {
-    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed income sources yet. Confirm detected items above or add manually below.</div>';
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed income sources yet. Add manually below or check <strong>Tracker</strong> for items detected from statements.</div>';
   }
   html+='</div>';
 
-  // ─── SECTION 3: Manual Entry ───
+  // ─── SECTION 2: Manual Entry ───
   html+='<div class="section-block manual fi">';
   html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Source Name</label><input class="form-input" id="incName" placeholder="e.g. Main job salary"></div>';
@@ -2396,64 +2840,14 @@ function subscriptionsView(){
   var items=data.items||[];
   var html=hubBackBtn("Subscriptions");
 
-  // Separate items by detection state
-  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  // Only show manually-added and confirmed items (no detected items section)
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
-  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_subscription"||i.detectionStatus==="not_relevant"});
 
   var activeConfirmed=confirmed.filter(function(i){return i.status==="active"});
   var inactiveConfirmed=confirmed.filter(function(i){return i.status!=="active"});
   var totalActiveMonthly=activeConfirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── SECTION 1: Detected from statements ───
-  html+='<div class="section-block detected fi">';
-  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
-  if(detected.length>0){
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring or likely subscription payments were found in your statements. Review and confirm to start tracking them.</div>';
-    html+='<div class="summary-grid">';
-    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Spend Detected</div></div>';
-    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Subscriptions</div></div>';
-    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
-    html+='</div>';
-    detected.forEach(function(it){
-      var conf=it.confidence||"Medium";
-      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
-      var nextDate=estimateNextDate(it.lastChargedDate||"",it.frequency);
-      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
-      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
-      html+='<div class="item-detail">'+escHtml(it.frequency||"Monthly");
-      if(it.lastChargedDate)html+=' &middot; Last charged: '+escHtml(it.lastChargedDate);
-      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
-      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
-      html+='</div>';
-      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
-      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
-      html+='</div>';
-      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
-      html+='<button class="btn-sm btn-edit" data-confirm-sub="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
-      html+='<button class="btn-sm btn-edit" data-edit-detected-sub="'+it.id+'">Edit</button>';
-      html+='<button class="btn-sm" data-dismiss-sub="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
-      html+='<button class="btn-sm" data-notsub="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
-      html+='</div></div>';
-    });
-    // Dismissed items inside detected block
-    if(dismissed.length>0){
-      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
-      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
-      dismissed.forEach(function(it){
-        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-        html+='<div class="item-actions"><button class="btn-sm" data-restore-sub="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Delete</button></div></div>';
-      });
-      html+='</div>';
-    }
-  } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected subscriptions from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
-  }
-  html+='</div>';
-
-  // ─── SECTION 2: Confirmed & Tracked ───
+  // ─── SECTION 1: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
   html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
   html+='<div class="summary-grid">';
@@ -2478,11 +2872,11 @@ function subscriptionsView(){
     });
   }
   if(confirmed.length===0){
-    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed subscriptions yet. Confirm detected items above or add manually below.</div>';
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed subscriptions yet. Add manually below or check <strong>Tracker</strong> for items detected from statements.</div>';
   }
   html+='</div>';
 
-  // ─── SECTION 3: Manual Entry ───
+  // ─── SECTION 2: Manual Entry ───
   html+='<div class="section-block manual fi">';
   html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Service Name</label><input class="form-input" id="subName" placeholder="e.g. Netflix, Spotify, Adobe"></div>';
@@ -2813,10 +3207,8 @@ function billsView(){
   var items=data.items||[];
   var html=hubBackBtn("Bills & Due Dates");
 
-  // Separate items by detection state
-  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  // Only show manually-added and confirmed items (no detected items section)
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
-  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_bill"||i.detectionStatus==="not_relevant"});
 
   var today=new Date().getDate();
   var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
@@ -2825,55 +3217,8 @@ function billsView(){
     var due=parseInt(i.dueDate)||0;
     return due>=today&&due<=today+7&&getBillStatus(i)!=="paid";
   });
-  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── SECTION 1: Detected from statements ───
-  html+='<div class="section-block detected fi">';
-  html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items'+(detected.length>0?' <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span>':'')+'</div>';
-  if(detected.length>0){
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring bill-like payments were found in your statements. Review and confirm to start tracking due dates and totals.</div>';
-    html+='<div class="summary-grid">';
-    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Bills Detected</div></div>';
-    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Bills Awaiting Review</div></div>';
-    html+='</div>';
-    detected.forEach(function(it){
-      var conf=it.confidence||"Medium";
-      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
-      var nextDate=estimateNextDate(it.lastPaidDate||"",it.frequency);
-      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
-      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
-      html+='<div class="item-detail">'+escHtml(it.method||"Auto-detected from statement");
-      if(it.lastPaidDate)html+=' &middot; Last paid: '+escHtml(it.lastPaidDate);
-      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
-      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
-      html+='</div>';
-      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
-      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
-      html+='</div>';
-      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
-      html+='<button class="btn-sm btn-edit" data-confirm-bill="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
-      html+='<button class="btn-sm btn-edit" data-edit-detected-bill="'+it.id+'">Edit</button>';
-      html+='<button class="btn-sm" data-dismiss-bill="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
-      html+='<button class="btn-sm" data-notbill="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
-      html+='</div></div>';
-    });
-    // Dismissed items inside detected block
-    if(dismissed.length>0){
-      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
-      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
-      dismissed.forEach(function(it){
-        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-        html+='<div class="item-actions"><button class="btn-sm" data-restore-bill="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Delete</button></div></div>';
-      });
-      html+='</div>';
-    }
-  } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected bills from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
-  }
-  html+='</div>';
-
-  // ─── SECTION 2: Confirmed & Tracked ───
+  // ─── SECTION 1: Confirmed & Tracked ───
   html+='<div class="section-block confirmed fi">';
   html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
   html+='<div class="summary-grid">';
@@ -2906,11 +3251,11 @@ function billsView(){
     });
   }
   if(confirmed.length===0){
-    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed bills yet. Confirm detected items above or add manually below.</div>';
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed bills yet. Add manually below or check <strong>Tracker</strong> for items detected from statements.</div>';
   }
   html+='</div>';
 
-  // ─── SECTION 3: Manual Entry ───
+  // ─── SECTION 2: Manual Entry ───
   html+='<div class="section-block manual fi">';
   html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="billName" placeholder="e.g. Rent, Electricity, Council Tax"></div>';
