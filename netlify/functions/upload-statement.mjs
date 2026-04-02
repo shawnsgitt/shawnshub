@@ -846,7 +846,7 @@ function verifyAndFixOrientation(transactions) {
   }
 
   // If inverted signals outnumber correct ones by 2:1, flip all signs
-  if (invertedCount > correctCount * 2 && invertedCount >= 3) {
+  if (invertedCount >= correctCount * 2 && invertedCount >= 3) {
     transactions.forEach(t => {
       if (t.type === "Non-Transactional") return; // don't flip non-transactional entries
       t.amount = -t.amount;
