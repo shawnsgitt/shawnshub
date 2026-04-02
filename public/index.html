@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -353,6 +354,7 @@ function render(){
   var a=document.getElementById("app");
   destroyCharts();
   if(cv==="home")a.innerHTML=homeView();
+    if(!hubCache["budget"])hubLoad("budget").then(function(){if(cv==="home"){a.innerHTML=homeView();initCharts();bindUpload();bindUncatClicks();bindAcctSelector();bindMonthSelector();bindTxnEvents();bindHubEvents();bindTrackerEvents();}});
   else if(cv==="upload")a.innerHTML=uploadView();
   else if(cv==="overview")a.innerHTML=dashboardView();
   else if(cv==="transactions")a.innerHTML=txnView();
@@ -439,6 +441,44 @@ function monthlyTxns(){
 function monthName(m){
   var names=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return names[m]||"";
+}
+
+// ───────── RECURRING TRANSACTION DETECTION ─────────
+function detectRecurringTransactions(){
+  var all=filtered();
+  if(!all.length)return[];
+  // Group by normalized description
+  var groups={};
+  all.forEach(function(t){
+    if(t.dateUnreadable||t.date==="UNREADABLE")return;
+    var effectiveType=t.type;
+    if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
+    if(effectiveType==="Non-Transactional")return;
+    var desc=(t.description||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+    if(!desc)return;
+    if(!groups[desc])groups[desc]={desc:t.description,type:effectiveType,txns:[]};
+    var p=t.date.split("/");
+    var d=parseInt(p[0],10),m=parseInt(p[1],10),y=parseInt(p[2],10);
+    groups[desc].txns.push({amount:txAmt(t),day:d,month:m,year:y,type:effectiveType});
+  });
+  // Filter to groups appearing in 2+ different months with similar amounts
+  var recurring=[];
+  Object.keys(groups).forEach(function(key){
+    var g=groups[key];
+    if(g.txns.length<2)return;
+    var monthSet={};
+    g.txns.forEach(function(tx){monthSet[tx.year*100+tx.month]=true});
+    if(Object.keys(monthSet).length<2)return;
+    // Check amount variance (within 20%)
+    var amounts=g.txns.map(function(tx){return tx.amount});
+    var avg=amounts.reduce(function(s,a){return s+a},0)/amounts.length;
+    var withinVariance=amounts.every(function(a){return Math.abs(a-avg)/avg<=0.2});
+    if(!withinVariance)return;
+    var days=g.txns.map(function(tx){return tx.day});
+    var avgDay=Math.round(days.reduce(function(s,d){return s+d},0)/days.length);
+    recurring.push({desc:g.desc,type:g.type,avgAmount:Math.round(avg*100)/100,avgDay:avgDay,occurrences:g.txns.length,months:Object.keys(monthSet).length});
+  });
+  return recurring;
 }
 
 function homeView(){
@@ -530,6 +570,10 @@ function homeView(){
     nwHint+
   '</div>'+
 
+  (D.netWorthHistory&&D.netWorthHistory.length>=2?
+  '<div class="ccard fi" style="animation-delay:.03s;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px"><h3 style="font-size:14px;font-weight:600;margin-bottom:12px">Net Worth Over Time</h3><div class="cwrap" style="height:200px"><canvas id="nwChart"></canvas></div></div>'
+  :'')+
+
   (hasBalanceData?
   '<div class="snap-row fi" style="animation-delay:.05s">'+
     '<div class="snap-card green"><div class="sc-label">Cash on hand</div><div class="sc-val">'+f(cashTotal)+'</div><div class="sc-sub">Across '+accts.filter(function(a){return !isDebtAccount(a)}).length+' account'+(accts.filter(function(a){return !isDebtAccount(a)}).length!==1?'s':'')+'</div></div>'+
@@ -561,6 +605,116 @@ function homeView(){
     '<div class="snap-card" style="border-color:var(--border);opacity:.7"><div class="sc-label" style="color:var(--dim)">Monthly cash flow</div><div class="sc-val" style="color:var(--dim);font-size:14px;font-weight:500">No monthly cash-flow data available yet</div><div class="sc-sub">Confirm transaction categories to unlock this insight</div></div>'+
   '</div>'
   )+
+
+  // ── 3-Month Trend ──
+  (function(){
+    var months=availableMonths();
+    if(months.length<2)return'';
+    var trendMonths=months.slice(0,3);
+    var trendData=[];
+    var maxVal=1;
+    trendMonths.forEach(function(mo){
+      var txns=filtered().filter(function(t){
+        if(t.dateUnreadable||t.date==="UNREADABLE")return false;
+        var p=t.date.split("/");
+        return parseInt(p[1],10)===mo.m&&parseInt(p[2],10)===mo.y;
+      });
+      var inc=0,spend=0;
+      txns.forEach(function(t){
+        var et=t.type;
+        if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+        if(et==="Income")inc+=txAmt(t);
+        else if(et==="Expense")spend+=txAmt(t);
+      });
+      trendData.push({label:monthName(mo.m)+" "+mo.y,income:inc,spending:spend});
+      if(inc>maxVal)maxVal=inc;
+      if(spend>maxVal)maxVal=spend;
+    });
+    var html='<div class="snap-divider fi" style="animation-delay:.16s"></div>';
+    html+='<div class="snap-section-title fi" style="animation-delay:.16s">3-Month Trend</div>';
+    trendData.forEach(function(d,idx){
+      var incPct=maxVal>0?Math.round(d.income/maxVal*100):0;
+      var spPct=maxVal>0?Math.round(d.spending/maxVal*100):0;
+      html+='<div class="fi" style="animation-delay:'+(.17+idx*0.02)+'s;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px">';
+      html+='<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">'+d.label+'</div>';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:10px;color:var(--muted);width:52px;flex-shrink:0">Income</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+incPct+'%;background:var(--green);border-radius:4px"></div></div><span style="font-size:11px;font-weight:600;color:var(--green);min-width:60px;text-align:right">'+f(d.income)+'</span></div>';
+      html+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:var(--muted);width:52px;flex-shrink:0">Spending</span><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+spPct+'%;background:var(--red);border-radius:4px"></div></div><span style="font-size:11px;font-weight:600;color:var(--red);min-width:60px;text-align:right">'+f(d.spending)+'</span></div>';
+      html+='</div>';
+    });
+    return html;
+  })()+
+
+  // ── Budget vs Actual ──
+  (function(){
+    var budgetData=hubCache["budget"];
+    if(!budgetData||!budgetData.items||budgetData.items.length===0)return'';
+    var lm=latestMonth();
+    if(!lm)return'';
+    var lmKey=lm.y+"-"+(lm.m<10?"0":"")+lm.m;
+    var budgetItems=budgetData.items.filter(function(it){
+      return it.budgetType!=="income"&&parseFloat(it.planned||0)>0&&(!it.month||it.month===lmKey);
+    });
+    if(budgetItems.length===0)return'';
+    var catSpending={};
+    mt.forEach(function(t){
+      var et=t.type;
+      var ec=t.category;
+      if(t.category==="Pending Review"&&t.suggestedCategory){ec=t.suggestedCategory;et=t.suggestedType||"Expense";}
+      if(et!=="Expense")return;
+      if(!catSpending[ec])catSpending[ec]=0;
+      catSpending[ec]+=txAmt(t);
+    });
+    var html='<div class="snap-divider fi" style="animation-delay:.22s"></div>';
+    html+='<div class="snap-section-title fi" style="animation-delay:.22s">Budget Progress</div>';
+    budgetItems.forEach(function(it,idx){
+      var planned=parseFloat(it.planned||0);
+      var actual=catSpending[it.category]||parseFloat(it.actual||0);
+      var pct=planned>0?Math.round(actual/planned*100):0;
+      var barColor=pct>100?"var(--red)":pct>=80?"var(--amber)":"var(--green)";
+      var barWidth=Math.min(pct,100);
+      html+='<div class="fi" style="animation-delay:'+(.23+idx*0.02)+'s;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px">';
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:13px;font-weight:600;color:var(--text)">'+escHtml(it.category)+'</span><span style="font-size:12px;font-weight:600;color:'+barColor+'">'+f(actual)+' / '+f(planned)+'</span></div>';
+      html+='<div style="width:100%;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+barWidth+'%;background:'+barColor+';border-radius:4px"></div></div>';
+      html+='<div style="font-size:10px;color:var(--dim);margin-top:4px">'+pct+'% of budget used</div>';
+      html+='</div>';
+    });
+    return html;
+  })()+
+
+  // ── Cash Flow Forecast (recurring transactions) ──
+  (function(){
+    var recurring=detectRecurringTransactions();
+    if(recurring.length===0)return'';
+    var lm=latestMonth();
+    if(!lm)return'';
+    var today=new Date();
+    var currentDay=today.getDate();
+    var monthTxns=mt;
+    var existingDescs={};
+    monthTxns.forEach(function(t){
+      var desc=(t.description||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+      existingDescs[desc]=true;
+    });
+    var expectedIncome=0,billsDue=0;
+    recurring.forEach(function(r){
+      var rKey=(r.desc||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+      if(existingDescs[rKey])return;
+      if(r.avgDay<=currentDay)return;
+      if(r.type==="Income")expectedIncome+=r.avgAmount;
+      else billsDue+=r.avgAmount;
+    });
+    if(expectedIncome===0&&billsDue===0)return'';
+    var projectedEnd=mIncome+expectedIncome-mSpending-billsDue;
+    var html='<div class="snap-divider fi" style="animation-delay:.28s"></div>';
+    html+='<div class="snap-section-title fi" style="animation-delay:.28s">Cash Flow Forecast</div>';
+    html+='<div class="fi" style="animation-delay:.29s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px">';
+    if(expectedIncome>0)html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Remaining income expected</span><span style="font-size:14px;font-weight:700;color:var(--green)">'+f(expectedIncome)+'</span></div>';
+    if(billsDue>0)html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Bills still due</span><span style="font-size:14px;font-weight:700;color:var(--red)">'+f(billsDue)+'</span></div>';
+    html+='<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:600;color:var(--text)">Projected end-of-month</span><span style="font-size:16px;font-weight:700;color:'+(projectedEnd>=0?"var(--green)":"var(--red)")+'">'+( projectedEnd<0?"-":"")+f(Math.abs(projectedEnd))+'</span></div>';
+    html+='<div style="font-size:10px;color:var(--dim);margin-top:6px">Based on recurring patterns detected across your transaction history</div>';
+    html+='</div>';
+    return html;
+  })()+
 
   // ── Review status & next steps ──
   (function(){
@@ -737,8 +891,8 @@ function uploadView(){
   '<div class="upload-zone fi" id="dropZone">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'+
     '<p>'+(hasData()?'Upload another file to re-analyze':'Tap to upload or drag your bank statement')+'</p>'+
-    '<div class="hint">Excel files (.xlsx, .xls) — analysis only, nothing is stored</div>'+
-    '<input type="file" id="fileInput" accept=".xlsx,.xls">'+
+    '<div class="hint">Excel or CSV files (.xlsx, .xls, .csv) — analysis only, nothing is stored</div>'+
+    '<input type="file" id="fileInput" accept=".xlsx,.xls,.csv">'+
   '</div>'+
   (hasData()?uploadSummary():
   '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>Analyze your spending</h2><p>Upload your bank statement Excel file to get instant spending analysis, category breakdowns, and personalized recommendations. Your data is analyzed in real-time and never stored.</p></div>');
@@ -801,7 +955,7 @@ function bindUpload(){
 
 async function doUpload(file){
   var ext=file.name.toLowerCase().split('.').pop();
-  if(ext!=="xlsx"&&ext!=="xls"){toast("Please upload an Excel file (.xlsx or .xls)",true);return}
+  if(ext!=="xlsx"&&ext!=="xls"&&ext!=="csv"){toast("Please upload an Excel or CSV file (.xlsx, .xls, or .csv)",true);return}
   var fd=new FormData();
   fd.append("file",file);
 
@@ -829,8 +983,26 @@ async function doUpload(file){
     });
     // Store parseStats for dashboard display
     data.parseStats=data.parseStats||null;
-    D=data;
-    if(!D.analysis)D.analysis={};
+    if(D && D.transactions && D.transactions.length > 0){
+      var existingKeys = new Set();
+      D.transactions.forEach(function(t){
+        existingKeys.add(t.date+'|'+t.description+'|'+t.amount);
+      });
+      var newCount = 0;
+      data.transactions.forEach(function(t){
+        var key = t.date+'|'+t.description+'|'+t.amount;
+        if(!existingKeys.has(key)){
+          D.transactions.push(t);
+          existingKeys.add(key);
+          newCount++;
+        }
+      });
+      D.parseStats = data.parseStats;
+      toast(newCount + ' new transactions added (' + (data.transactions.length - newCount) + ' duplicates skipped)');
+    } else {
+      D=data;
+      if(!D.analysis)D.analysis={};
+    }
     selMonth=null;
     buildAccounts();
     recalcAnalysis();
@@ -1318,6 +1490,7 @@ function bindBatchEvents(bg){
     recalcAnalysis();
     render();
     // Persist transactions to blobs and sync to hub
+    recordNetWorthSnapshot();
     saveTransactionsToBlobs();
     syncTransactionsToHub();
     toast("Analysis updated & saved");
@@ -1579,6 +1752,11 @@ function dashboardView(){
     '<div class="k p"><div class="l">Saved</div><div class="v">'+f(tsv)+'</div><div class="sub">'+saveRatio+'% of income</div></div>'+
     '<div class="k '+(net>=0?"a":"r")+'"><div class="l">Net Balance</div><div class="v">'+(net>=0?"+":"-")+f(Math.abs(net))+'</div><div class="sub">'+(net>=0?"surplus":"deficit")+'</div></div>'+
   '</div>';
+
+  // Net Worth Over Time chart (dashboard)
+  if(D.netWorthHistory&&D.netWorthHistory.length>=2){
+    html+='<div class="sec fi" style="animation-delay:.04s"><div class="ccard"><h3>Net Worth Over Time</h3><div class="cwrap" style="height:200px"><canvas id="nwChart"></canvas></div></div></div>';
+  }
 
   // Money flow bar
   html+='<div class="sec fi" style="animation-delay:.05s"><div class="stitle">Money Flow</div>'+
@@ -1915,6 +2093,30 @@ function initCharts(){
       tooltip:{callbacks:{label:function(ctx){return ctx.label+": £"+ctx.raw.toLocaleString("en-GB")}}}},
       scales:{r:{grid:{color:"rgba(45,58,82,.3)"},ticks:{display:false}}},animation:{duration:800}}});
   }
+
+  // Net Worth Over Time line chart
+  var elNw=document.getElementById("nwChart");
+  if(elNw&&D&&D.netWorthHistory&&D.netWorthHistory.length>=2){
+    var nwLabels=D.netWorthHistory.map(function(p){
+      var parts=p.date.split("-");
+      var mNames=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      return mNames[parseInt(parts[1],10)-1]+" "+parts[0];
+    });
+    var nwData=D.netWorthHistory.map(function(p){return Math.round(p.netWorth)});
+    charts.nwChart=new Chart(elNw,{type:"line",data:{
+      labels:nwLabels,
+      datasets:[{label:"Net Worth",data:nwData,
+        borderColor:"#22c55e",backgroundColor:"rgba(34,197,94,.12)",
+        borderWidth:2.5,pointRadius:4,pointBackgroundColor:"#22c55e",
+        pointBorderColor:"#0a0f1a",pointBorderWidth:2,
+        fill:true,tension:0.3}]
+    },options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:function(ctx){return"Net Worth: \u00a3"+ctx.raw.toLocaleString("en-GB")}}}},
+      scales:{x:{grid:{color:"rgba(45,58,82,.3)"},ticks:{font:{size:10}}},
+        y:{grid:{color:"rgba(45,58,82,.3)"},ticks:{callback:function(v){return"\u00a3"+v.toLocaleString("en-GB")},font:{size:10}}}},
+      animation:{duration:800}}});
+  }
 }
 
 // ───────── HUB DATA API HELPERS ─────────
@@ -2016,6 +2218,116 @@ function trackerView(){
   if(totalDetected>0){
     html+='<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--purple)">'+totalDetected+' item'+(totalDetected!==1?'s':'')+' detected</strong> from your uploaded statements &mdash; review and confirm to start tracking.</div>';
   }
+
+  // ── Smart Alerts ──
+  var alerts=[];
+  // Check subscription price changes
+  var subItems=((hubCache["subscriptions"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus!=="detected"});
+  subItems.forEach(function(sub){
+    if(!sub.name||!sub.amount)return;
+    var subDesc=(sub.name||"").toLowerCase();
+    var subAmt=parseFloat(sub.amount||0);
+    var allTxns=filtered();
+    var matches=allTxns.filter(function(t){return (t.description||"").toLowerCase().indexOf(subDesc)!==-1});
+    if(matches.length<2)return;
+    var amounts=matches.map(function(t){return txAmt(t)});
+    var latest=amounts[0];
+    var prev=amounts[1];
+    if(latest&&prev&&Math.abs(latest-prev)/prev>0.05&&latest!==prev){
+      alerts.push({type:"warning",text:escHtml(sub.name)+" price changed from "+f(prev)+" to "+f(latest)});
+    }
+  });
+  // Check bill items for overdue status
+  var billItems=((hubCache["bills"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus!=="detected"});
+  var today=new Date();
+  billItems.forEach(function(bill){
+    if(!bill.dueDay)return;
+    var dueDay=parseInt(bill.dueDay,10);
+    if(isNaN(dueDay))return;
+    if(today.getDate()>dueDay&&bill.status!=="paid"){
+      alerts.push({type:"critical",text:escHtml(bill.name||bill.description||"A bill")+" was due on day "+dueDay+" and appears unpaid"});
+  // Check for expected income not yet arrived (recurring patterns)
+  var recurring=detectRecurringTransactions();
+  var currentDay=today.getDate();
+  var lm=latestMonth();
+  if(lm){
+    var mtCurrent=filtered().filter(function(t){
+      if(t.dateUnreadable||t.date==="UNREADABLE")return false;
+      var p=t.date.split("/");
+      return parseInt(p[1],10)===lm.m&&parseInt(p[2],10)===lm.y;
+    });
+    var existingDescs={};
+    mtCurrent.forEach(function(t){
+      var desc=(t.description||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+      existingDescs[desc]=true;
+    });
+    recurring.forEach(function(r){
+      if(r.type!=="Income")return;
+      var rKey=(r.desc||"").toLowerCase().replace(/[^a-z0-9 ]/g,"").trim();
+      if(existingDescs[rKey])return;
+      if(r.avgDay<currentDay){
+        alerts.push({type:"warning",text:"Expected income '"+escHtml(r.desc)+"' (~"+f(r.avgAmount)+") usually arrives by day "+r.avgDay+" but hasn't appeared yet"});
+      }
+    });
+  }
+  // Check for unusual spending (category 50%+ above 3-month average)
+  var months=availableMonths();
+  if(months.length>=2){
+    var currentMonth=months[0];
+    var prevMonths=months.slice(1,4);
+    var currentCatSpend={};
+    filtered().filter(function(t){
+      if(t.dateUnreadable||t.date==="UNREADABLE")return false;
+      var p=t.date.split("/");
+      return parseInt(p[1],10)===currentMonth.m&&parseInt(p[2],10)===currentMonth.y;
+    }).forEach(function(t){
+      var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+      if(et!=="Expense")return;
+      var cat=t.category;if(t.category==="Pending Review"&&t.suggestedCategory)cat=t.suggestedCategory;
+      if(!currentCatSpend[cat])currentCatSpend[cat]=0;
+      currentCatSpend[cat]+=txAmt(t);
+    });
+    var prevCatTotals={},prevCatCounts={};
+    prevMonths.forEach(function(mo){
+      filtered().filter(function(t){
+        if(t.dateUnreadable||t.date==="UNREADABLE")return false;
+        var p=t.date.split("/");
+        return parseInt(p[1],10)===mo.m&&parseInt(p[2],10)===mo.y;
+      }).forEach(function(t){
+        var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+        if(et!=="Expense")return;
+        var cat=t.category;if(t.category==="Pending Review"&&t.suggestedCategory)cat=t.suggestedCategory;
+        if(!prevCatTotals[cat])prevCatTotals[cat]=0;
+        if(!prevCatCounts[cat])prevCatCounts[cat]=0;
+        prevCatTotals[cat]+=txAmt(t);
+        prevCatCounts[cat]++;
+      });
+    });
+    Object.keys(currentCatSpend).forEach(function(cat){
+      if(!prevCatTotals[cat]||!prevCatCounts[cat])return;
+      var avgMonthly=prevCatTotals[cat]/prevMonths.length;
+      if(avgMonthly>0&&currentCatSpend[cat]>avgMonthly*1.5){
+        alerts.push({type:"info",text:escHtml(cat)+" spending ("+f(currentCatSpend[cat])+") is "+Math.round((currentCatSpend[cat]/avgMonthly-1)*100)+"% above its recent average of "+f(avgMonthly)+"/month"});
+      }
+    });
+  }
+  if(alerts.length>0){
+    html+='<div class="fi" style="margin-bottom:14px">';
+    html+='<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;color:var(--text)">Smart Alerts</div>';
+    alerts.forEach(function(al){
+      var bgColor=al.type==="critical"?"var(--rbg)":al.type==="warning"?"var(--abg)":"rgba(59,130,246,.1)";
+      var borderColor=al.type==="critical"?"rgba(239,68,68,.25)":al.type==="warning"?"rgba(245,158,11,.25)":"rgba(59,130,246,.25)";
+      var textColor=al.type==="critical"?"var(--red)":al.type==="warning"?"var(--amber)":"var(--blue)";
+      var icon=al.type==="critical"?"&#9888;":al.type==="warning"?"&#9888;":"&#8505;";
+      html+='<div style="background:'+bgColor+';border:1px solid '+borderColor+';border-radius:12px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px">';
+      html+='<span style="font-size:16px;flex-shrink:0;color:'+textColor+'">'+icon+'</span>';
+      html+='<span style="font-size:12px;color:var(--text);line-height:1.5">'+al.text+'</span>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+    }
+  });
 
   html+='<div class="hub-menu fi">';
   var menuItems=[
@@ -3003,6 +3315,28 @@ function savingsGoalsView(){
   html+='<div class="form-group"><label class="form-label">Deadline</label><input class="form-input" id="sgDeadline" type="date"></div>';
   html+='<button class="btn-primary" id="sgAdd">Add Goal</button></div>';
 
+  // Calculate monthly savings rate from last 3 months of Savings category transactions
+  var monthlySavingsRate=0;
+  var savingsMonths=availableMonths();
+  if(savingsMonths.length>0&&hasData()){
+    var recentMonths=savingsMonths.slice(0,3);
+    var totalSavings=0;
+    recentMonths.forEach(function(mo){
+      filtered().filter(function(t){
+        if(t.dateUnreadable||t.date==="UNREADABLE")return false;
+        var p=t.date.split("/");
+        return parseInt(p[1],10)===mo.m&&parseInt(p[2],10)===mo.y;
+      }).forEach(function(t){
+        var et=t.type;
+        if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+        var ec=t.category;
+        if(t.category==="Pending Review"&&t.suggestedCategory)ec=t.suggestedCategory;
+        if(et==="Savings"||ec==="Savings")totalSavings+=txAmt(t);
+      });
+    });
+    if(recentMonths.length>0)monthlySavingsRate=Math.round(totalSavings/recentMonths.length);
+  }
+
   if(items.length>0){
     html+='<div class="sec fi"><div class="stitle">Your Goals</div>';
     items.forEach(function(it){
@@ -3017,6 +3351,11 @@ function savingsGoalsView(){
         var months=Math.max(1,(dl.getFullYear()-now.getFullYear())*12+(dl.getMonth()-now.getMonth()));
         monthlyNeeded=Math.ceil(remaining/months);
       }
+      // Projected completion based on detected savings rate
+      var projectedMonths=0;
+      if(monthlySavingsRate>0&&remaining>0){
+        projectedMonths=Math.ceil(remaining/monthlySavingsRate);
+      }
       html+='<div class="goal-card"><div class="goal-top"><div class="goal-name">'+escHtml(it.name)+'</div><div style="font-size:12px;font-weight:700;color:var(--purple)">'+pct+'%</div></div>';
       html+='<div class="goal-amounts"><span>'+f(current)+' saved</span><span>'+f(target)+' target</span></div>';
       html+='<div class="progress-bar"><span style="width:'+pct+'%;background:var(--purple)"></span></div>';
@@ -3025,6 +3364,15 @@ function savingsGoalsView(){
       if(it.deadline)html+='<span>Deadline: '+it.deadline+'</span>';
       html+='</div>';
       if(monthlyNeeded>0)html+='<div style="font-size:12px;color:var(--amber);margin-top:6px;font-weight:600">Need '+f(monthlyNeeded)+'/month to reach goal</div>';
+      // Savings rate projection
+      if(monthlySavingsRate>0&&remaining>0){
+        html+='<div style="background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:8px">';
+        html+='<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Detected savings rate: <strong style="color:var(--green)">'+f(monthlySavingsRate)+'/month</strong> (last '+(savingsMonths.length>=3?'3':savingsMonths.length)+' months)</div>';
+        html+='<div style="font-size:12px;font-weight:600;color:var(--text)">'+f(current)+' / '+f(target)+' &mdash; at current rate, <span style="color:var(--purple)">'+projectedMonths+' month'+(projectedMonths!==1?'s':'')+' to go</span></div>';
+        html+='</div>';
+      } else if(remaining>0){
+        html+='<div style="font-size:11px;color:var(--dim);margin-top:6px;font-style:italic">Set up regular savings to see projected completion date</div>';
+      }
       html+='<div class="item-actions"><button class="btn-sm btn-edit" data-edit-sg="'+it.id+'">Update Amount</button><button class="btn-sm btn-danger" data-del-sg="'+it.id+'">Remove</button></div></div>';
     });
     html+='</div>';
@@ -3544,6 +3892,40 @@ function bindGoalsEvents(){
   });
 }
 
+function recordNetWorthSnapshot(){
+  if(!D||!D.transactions||!D.transactions.length)return;
+  var accts=accounts();
+  var cashTotal=0,debtTotal=0;
+  accts.forEach(function(a){
+    var bal=latestBalance(a);
+    if(isDebtAccount(a)){debtTotal+=Math.abs(bal);}
+    else{cashTotal+=bal;}
+  });
+  var nw=cashTotal-debtTotal;
+  if(nw===0&&cashTotal===0&&D.parseStats&&D.parseStats.closingBalance!=null){
+    nw=D.parseStats.closingBalance;
+    cashTotal=D.parseStats.closingBalance;
+  }
+  if(nw===0&&cashTotal===0&&debtTotal===0)return;
+  var now=new Date();
+  var key=now.getFullYear()+"-"+(now.getMonth()+1<10?"0":"")+(now.getMonth()+1);
+  if(!D.netWorthHistory)D.netWorthHistory=[];
+  var found=false;
+  for(var i=0;i<D.netWorthHistory.length;i++){
+    if(D.netWorthHistory[i].date===key){
+      D.netWorthHistory[i].netWorth=nw;
+      D.netWorthHistory[i].cash=cashTotal;
+      D.netWorthHistory[i].debt=debtTotal;
+      found=true;
+      break;
+    }
+  }
+  if(!found){
+    D.netWorthHistory.push({date:key,netWorth:nw,cash:cashTotal,debt:debtTotal});
+  }
+  D.netWorthHistory.sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+}
+
 // ───────── DATA PERSISTENCE (save/load transactions to Netlify Blobs) ─────────
 async function saveTransactionsToBlobs(){
   if(!D||!D.transactions)return;
@@ -3551,7 +3933,7 @@ async function saveTransactionsToBlobs(){
     await fetch("/api/hub-data?collection=uploaded-transactions",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({action:"set",data:{items:D.transactions,analysis:D.analysis,savedAt:new Date().toISOString()}})
+      body:JSON.stringify({action:"set",data:{items:D.transactions,analysis:D.analysis,parseStats:D.parseStats||null,netWorthHistory:D.netWorthHistory||[],savedAt:new Date().toISOString()}})
     });
   }catch(e){/* silent */}
 }
@@ -3561,7 +3943,7 @@ async function loadTransactionsFromBlobs(){
     var r=await fetch("/api/hub-data?collection=uploaded-transactions");
     var data=await r.json();
     if(data&&data.items&&data.items.length>0){
-      D={transactions:data.items,analysis:data.analysis||{},success:true};
+      D={transactions:data.items,analysis:data.analysis||{},parseStats:data.parseStats||null,netWorthHistory:data.netWorthHistory||[],success:true};
       buildAccounts();
       if(!D.analysis||!D.analysis.categoryBreakdown){
         recalcAnalysis();
@@ -3812,6 +4194,7 @@ async function syncTransactionsToHub(){
 (async function(){
   var loaded=await loadTransactionsFromBlobs();
   if(loaded){
+    recordNetWorthSnapshot();
     render();
     // Re-sync detected items (bills, subscriptions, income) from uploaded transactions
     syncTransactionsToHub().then(function(){render()});
