@@ -517,7 +517,7 @@ function homeView(){
 
   return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
   acctSelector()+
-  (pendingReview(pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
+  (pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
   '<div class="snap-hero fi">'+
     '<div class="nw-label">Net Worth</div>'+
     (hasBalanceData?
