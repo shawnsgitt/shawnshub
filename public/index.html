@@ -2081,37 +2081,113 @@ async function loadHubSection(section){
 // ───────── INCOME VIEW ─────────
 var INCOME_TYPES=["Salary","Side Income","Freelance Income","Passive Income","Irregular Income"];
 
+function parseDateFlex(s){
+  if(!s)return null;
+  // Try DD/MM/YYYY first
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m)return new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1]));
+  // Try YYYY-MM-DD
+  var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m2)return new Date(parseInt(m2[1]),parseInt(m2[2])-1,parseInt(m2[3]));
+  // Fallback
+  var d=new Date(s);
+  return isNaN(d.getTime())?null:d;
+}
+
+function dateToISO(s){
+  var d=parseDateFlex(s);
+  return d?d.toISOString().slice(0,10):"";
+}
+
+function estimateNextDate(lastDate,frequency){
+  if(!lastDate)return"";
+  var d=parseDateFlex(lastDate);
+  if(!d)return"";
+  var freq=(frequency||"monthly").toLowerCase();
+  if(freq==="monthly")d.setMonth(d.getMonth()+1);
+  else if(freq==="weekly")d.setDate(d.getDate()+7);
+  else if(freq==="bi-weekly")d.setDate(d.getDate()+14);
+  else if(freq==="quarterly")d.setMonth(d.getMonth()+3);
+  else if(freq==="yearly")d.setFullYear(d.getFullYear()+1);
+  else d.setMonth(d.getMonth()+1);
+  return d.toISOString().slice(0,10);
+}
+
 function incomeView(){
   var data=hubCache["income"]||{items:[]};
   var items=data.items||[];
   var html=hubBackBtn("Income Tracker");
 
-  // Also show income detected from transactions
-  var txnIncome=0;
-  if(D&&D.transactions){
-    var confirmedIncome=D.transactions.filter(function(t){return t.confirmed!==false&&t.type==="Income"});
-    txnIncome=confirmedIncome.reduce(function(s,t){return s+txAmt(t)},0);
+  // Separate items by detection state
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
+
+  var confirmedMonthly=confirmed.filter(function(i){return(i.frequency||"monthly")==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+
+  // ─── Detected layer summary cards ───
+  if(detected.length>0){
+    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
+    html+='<div class="summary-grid fi">';
+    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Income Detected</div></div>';
+    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Sources</div></div>';
+    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
+    html+='</div>';
   }
 
-  // Summary
-  var totalMonthly=items.filter(function(i){return i.frequency==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  // ─── Confirmed layer summary cards ───
+  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
   html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(totalAll)+'</div><div class="ss-label">All Sources</div></div>';
-  if(txnIncome>0){
-    html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(txnIncome)+'</div><div class="ss-label">From Statements</div></div>';
-  }
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+confirmed.length+'</div><div class="ss-label">Confirmed Sources</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(confirmedMonthly*12)+'</div><div class="ss-label">Estimated Yearly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(confirmedTotal)+'</div><div class="ss-label">All Confirmed Sources</div></div>';
   html+='</div>';
 
-  // Show auto-detected sources
-  var uploadSources=items.filter(function(i){return i.source==="upload"});
-  if(uploadSources.length>0){
-    html+='<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi"><strong style="color:var(--green)">'+uploadSources.length+' income source'+(uploadSources.length!==1?'s':'')+' auto-detected</strong> from your uploaded bank statement</div>';
+  // ─── Section A: Detected from statements ───
+  if(detected.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected from uploaded statements</div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These income sources were found in your statements. Review and confirm to start tracking them.</div>';
+    detected.forEach(function(it){
+      var conf=it.confidence||"Medium";
+      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
+      var nextDate=estimateNextDate(it.lastReceivedDate||it.lastDate||"",it.frequency);
+      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
+      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
+      html+='<div class="item-detail">'+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly");
+      if(it.lastReceivedDate||it.lastDate)html+=' &middot; Last received: '+escHtml(it.lastReceivedDate||it.lastDate);
+      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
+      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
+      html+='</div>';
+      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
+      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
+      html+='</div>';
+      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
+      html+='<button class="btn-sm btn-edit" data-confirm-income="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
+      html+='<button class="btn-sm btn-edit" data-edit-detected-income="'+it.id+'">Edit</button>';
+      html+='<button class="btn-sm" data-dismiss-income="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
+      html+='<button class="btn-sm" data-notrelevant-income="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
+      html+='</div></div>';
+    });
+    html+='</div>';
   }
 
-  // Add form
-  html+='<div class="ccard fi"><h3>Add Income Source</h3>';
+  // ─── Section B: Confirmed / tracked income ───
+  if(confirmed.length>0){
+    html+='<div class="sec fi"><div class="stitle">Confirmed Income Sources</div>';
+    confirmed.forEach(function(it){
+      var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+
+  // ─── Section C: Add manually ───
+  html+='<div class="ccard fi"><h3>Add income source manually</h3>';
   html+='<div class="form-group"><label class="form-label">Source Name</label><input class="form-input" id="incName" placeholder="e.g. Main job salary"></div>';
   html+='<div class="form-group"><label class="form-label">Type</label><select class="form-select" id="incType">';
   INCOME_TYPES.forEach(function(t){html+='<option value="'+t+'">'+t+'</option>'});
@@ -2120,15 +2196,17 @@ function incomeView(){
   html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="incFreq"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="bi-weekly">Bi-Weekly</option><option value="one-off">One-Off</option><option value="irregular">Irregular</option></select></div>';
   html+='<button class="btn-primary" id="incAdd">Add Income Source</button></div>';
 
-  // List
-  if(items.length>0){
-    html+='<div class="sec fi"><div class="stitle">Income Sources</div>';
-    items.forEach(function(it){
-      var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
-      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type)+' &middot; '+escHtml(it.frequency||"monthly")+(it.source==="upload"?' &middot; <span style="color:var(--green)">From statement</span>':'')+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div><div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
+  // ─── Dismissed items (collapsed) ───
+  if(dismissed.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
+    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not relevant.</div>';
+    dismissed.forEach(function(it){
+      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm" data-restore-income="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Delete</button></div></div>';
     });
     html+='</div>';
   }
+
   return html;
 }
 
@@ -2139,10 +2217,78 @@ function bindIncomeEvents(){
     var amount=parseFloat(document.getElementById("incAmount").value);
     if(!name||!amount){toast("Please fill in name and amount",true);return}
     addBtn.disabled=true;
-    await hubAdd("income",{name:name,type:document.getElementById("incType").value,amount:amount,frequency:document.getElementById("incFreq").value});
+    await hubAdd("income",{name:name,type:document.getElementById("incType").value,amount:amount,frequency:document.getElementById("incFreq").value,source:"manual",detectionStatus:"confirmed"});
     await hubLoad("income");
     toast("Income source added");render();
   });
+  // Confirm detected income
+  document.querySelectorAll("[data-confirm-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.confirmIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Income source confirmed and now tracked");render();
+    });
+  });
+  // Edit detected income
+  document.querySelectorAll("[data-edit-detected-income]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editDetectedIncome});
+      if(!item)return;
+      var newName=prompt("Source name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      var newFreq=prompt("Frequency (monthly/weekly/bi-weekly/one-off/irregular):",item.frequency||"monthly");
+      if(newFreq===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.frequency=newFreq||item.frequency;
+      item.detectionStatus="edited_confirmed";
+      hubUpdate("income",item).then(function(){hubLoad("income").then(function(){toast("Income source edited and confirmed");render()})});
+    });
+  });
+  // Dismiss detected income
+  document.querySelectorAll("[data-dismiss-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.dismissIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Dismissed");render();
+    });
+  });
+  // Mark as not relevant
+  document.querySelectorAll("[data-notrelevant-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.notrelevantIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="not_relevant";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Marked as not relevant");render();
+    });
+  });
+  // Restore dismissed item back to detected
+  document.querySelectorAll("[data-restore-income]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["income"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.restoreIncome});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      await hubUpdate("income",item);
+      await hubLoad("income");toast("Restored for review");render();
+    });
+  });
+  // Delete income
   document.querySelectorAll("[data-del-income]").forEach(function(b){
     b.addEventListener("click",async function(){
       await hubDelete("income",b.dataset.delIncome);
@@ -2239,7 +2385,7 @@ function subscriptionsView(){
   // Separate items by detection state
   var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
-  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_subscription"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_subscription"||i.detectionStatus==="not_relevant"});
 
   var activeConfirmed=confirmed.filter(function(i){return i.status==="active"});
   var inactiveConfirmed=confirmed.filter(function(i){return i.status!=="active"});
@@ -2272,10 +2418,12 @@ function subscriptionsView(){
     detected.forEach(function(it){
       var conf=it.confidence||"Medium";
       var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
+      var nextDate=estimateNextDate(it.lastChargedDate||"",it.frequency);
       html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
       html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
       html+='<div class="item-detail">'+escHtml(it.frequency||"Monthly");
       if(it.lastChargedDate)html+=' &middot; Last charged: '+escHtml(it.lastChargedDate);
+      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
       if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
       html+='</div>';
       html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
@@ -2286,7 +2434,7 @@ function subscriptionsView(){
       html+='<button class="btn-sm btn-edit" data-confirm-sub="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
       html+='<button class="btn-sm btn-edit" data-edit-detected-sub="'+it.id+'">Edit</button>';
       html+='<button class="btn-sm" data-dismiss-sub="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
-      html+='<button class="btn-sm" data-notsub="'+it.id+'" style="color:var(--dim);font-size:10px">Not a subscription</button>';
+      html+='<button class="btn-sm" data-notsub="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
       html+='</div></div>';
     });
     html+='</div>';
@@ -2328,7 +2476,7 @@ function subscriptionsView(){
     html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
     html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a subscription.</div>';
     dismissed.forEach(function(it){
-      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"?"Marked as not a subscription":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
       html+='<div class="item-actions"><button class="btn-sm" data-restore-sub="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Delete</button></div></div>';
     });
     html+='</div>';
@@ -2399,10 +2547,10 @@ function bindSubscriptionsEvents(){
       var item=items.find(function(i){return i.id===b.dataset.notsub});
       if(!item)return;
       b.disabled=true;
-      item.detectionStatus="not_subscription";
+      item.detectionStatus="not_relevant";
       item.status="cancelled";
       await hubUpdate("subscriptions",item);
-      await hubLoad("subscriptions");toast("Marked as not a subscription");render();
+      await hubLoad("subscriptions");toast("Marked as not relevant");render();
     });
   });
   // Restore dismissed item back to detected
@@ -2655,7 +2803,7 @@ function billsView(){
   // Separate items by detection state
   var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
-  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_bill"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_bill"||i.detectionStatus==="not_relevant"});
 
   var today=new Date().getDate();
   var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
@@ -2690,10 +2838,12 @@ function billsView(){
     detected.forEach(function(it){
       var conf=it.confidence||"Medium";
       var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
+      var nextDate=estimateNextDate(it.lastPaidDate||"",it.frequency);
       html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
       html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
       html+='<div class="item-detail">'+escHtml(it.method||"Auto-detected from statement");
       if(it.lastPaidDate)html+=' &middot; Last paid: '+escHtml(it.lastPaidDate);
+      if(nextDate)html+=' &middot; Next expected: '+escHtml(nextDate);
       if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
       html+='</div>';
       html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
@@ -2701,10 +2851,10 @@ function billsView(){
       html+='</div>';
       html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
       html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
-      html+='<button class="btn-sm btn-edit" data-confirm-bill="'+it.id+'" style="background:var(--green);color:#fff">Confirm as bill</button>';
+      html+='<button class="btn-sm btn-edit" data-confirm-bill="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
       html+='<button class="btn-sm btn-edit" data-edit-detected-bill="'+it.id+'">Edit</button>';
       html+='<button class="btn-sm" data-dismiss-bill="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
-      html+='<button class="btn-sm" data-notbill="'+it.id+'" style="color:var(--dim);font-size:10px">Not a bill</button>';
+      html+='<button class="btn-sm" data-notbill="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
       html+='</div></div>';
     });
     html+='</div>';
@@ -2755,7 +2905,7 @@ function billsView(){
     html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
     html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a bill.</div>';
     dismissed.forEach(function(it){
-      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"?"Marked as not a bill":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
       html+='<div class="item-actions"><button class="btn-sm" data-restore-bill="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Delete</button></div></div>';
     });
     html+='</div>';
@@ -2836,9 +2986,9 @@ function bindBillsEvents(){
       var item=items.find(function(i){return i.id===b.dataset.notbill});
       if(!item)return;
       b.disabled=true;
-      item.detectionStatus="not_bill";
+      item.detectionStatus="not_relevant";
       await hubUpdate("bills",item);
-      await hubLoad("bills");toast("Marked as not a bill");render();
+      await hubLoad("bills");toast("Marked as not relevant");render();
     });
   });
   // Restore dismissed item back to detected
@@ -3069,6 +3219,32 @@ async function loadTransactionsFromBlobs(){
 }
 
 // ───────── SYNC TRANSACTIONS TO HUB (bills, subscriptions, income, budget, etc.) ─────────
+// Helper: compare two DD/MM/YYYY dates properly (returns true if a is later than b)
+function dateIsLater(a,b){
+  var da=parseDateFlex(a),db=parseDateFlex(b);
+  if(!da)return false;
+  if(!db)return true;
+  return da.getTime()>db.getTime();
+}
+
+// Helper: infer frequency from transaction dates
+function inferFrequency(dates){
+  if(dates.length<2)return"Monthly";
+  var parsed=dates.map(function(d){return parseDateFlex(d)}).filter(function(d){return d!==null});
+  if(parsed.length<2)return"Monthly";
+  parsed.sort(function(a,b){return a.getTime()-b.getTime()});
+  var gaps=[];
+  for(var i=1;i<parsed.length;i++){
+    gaps.push(Math.round((parsed[i]-parsed[i-1])/(1000*60*60*24)));
+  }
+  var avg=gaps.reduce(function(s,g){return s+g},0)/gaps.length;
+  if(avg<=10)return"Weekly";
+  if(avg<=21)return"Bi-Weekly";
+  if(avg<=45)return"Monthly";
+  if(avg<=120)return"Quarterly";
+  return"Yearly";
+}
+
 async function syncTransactionsToHub(){
   if(!D||!D.transactions)return;
   var confirmed=D.transactions.filter(function(t){return t.confirmed!==false});
@@ -3079,12 +3255,13 @@ async function syncTransactionsToHub(){
   billTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!billGroups[key]){
-      billGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:""};
+      billGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:"",dates:[]};
     }
     billGroups[key].total+=txAmt(t);
     billGroups[key].count++;
     billGroups[key].amounts.push(txAmt(t));
-    if(t.date&&t.date>billGroups[key].lastDate)billGroups[key].lastDate=t.date;
+    if(t.date)billGroups[key].dates.push(t.date);
+    if(dateIsLater(t.date,billGroups[key].lastDate))billGroups[key].lastDate=t.date;
   });
 
   // Extract subscriptions
@@ -3093,12 +3270,13 @@ async function syncTransactionsToHub(){
   subTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!subGroups[key]){
-      subGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:""};
+      subGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:"",dates:[]};
     }
     subGroups[key].total+=txAmt(t);
     subGroups[key].count++;
     subGroups[key].amounts.push(txAmt(t));
-    if(t.date&&t.date>subGroups[key].lastDate)subGroups[key].lastDate=t.date;
+    if(t.date)subGroups[key].dates.push(t.date);
+    if(dateIsLater(t.date,subGroups[key].lastDate))subGroups[key].lastDate=t.date;
   });
 
   // Extract income sources
@@ -3107,26 +3285,46 @@ async function syncTransactionsToHub(){
   incomeTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!incomeGroups[key]){
-      incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.category};
+      incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.category,lastDate:"",dates:[]};
     }
     incomeGroups[key].total+=txAmt(t);
     incomeGroups[key].count++;
     incomeGroups[key].amounts.push(txAmt(t));
+    if(t.date)incomeGroups[key].dates.push(t.date);
+    if(dateIsLater(t.date,incomeGroups[key].lastDate))incomeGroups[key].lastDate=t.date;
   });
 
   // Sync bills to hub
   try{
     var existingBills=await fetch("/api/hub-data?collection=bills").then(function(r){return r.json()});
-    var existingBillNames=(existingBills.items||[]).map(function(b){return normalizeDesc(b.name)});
+    var existingBillMap={};
+    (existingBills.items||[]).forEach(function(b){existingBillMap[normalizeDesc(b.name)]=b});
 
     for(var bk in billGroups){
       var bg=billGroups[bk];
-      if(existingBillNames.indexOf(bk)===-1){
-        var avgAmt=Math.round(bg.total/bg.count*100)/100;
+      var avgAmt=Math.round(bg.total/bg.count*100)/100;
+      var billFreq=inferFrequency(bg.dates);
+      var lastPaid=dateToISO(bg.lastDate);
+      var existing=existingBillMap[bk];
+      if(!existing){
         await fetch("/api/hub-data?collection=bills",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({action:"add",item:{name:bg.name,amount:avgAmt,dueDate:"",method:"Auto-detected from statement",status:"pending",source:"upload",detectionStatus:"detected",confidence:bg.count>=3?"High":bg.count>=2?"Medium":"Low",lastPaidDate:bg.lastDate||"",occurrences:bg.count}})
+          body:JSON.stringify({action:"add",item:{name:bg.name,amount:avgAmt,dueDate:"",frequency:billFreq,method:"Auto-detected from statement",status:"pending",source:"upload",detectionStatus:"detected",confidence:bg.count>=3?"High":bg.count>=2?"Medium":"Low",lastPaidDate:lastPaid,occurrences:bg.count}})
+        });
+      }else if(existing.detectionStatus==="detected"||!existing.detectionStatus){
+        // Update existing detected/legacy items with fresh data
+        existing.amount=avgAmt;
+        existing.frequency=existing.frequency||billFreq;
+        existing.confidence=bg.count>=3?"High":bg.count>=2?"Medium":"Low";
+        existing.lastPaidDate=lastPaid||existing.lastPaidDate||"";
+        existing.occurrences=bg.count;
+        existing.source="upload";
+        if(!existing.detectionStatus)existing.detectionStatus="detected";
+        await fetch("/api/hub-data?collection=bills",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"update",item:existing})
         });
       }
     }
@@ -3135,16 +3333,33 @@ async function syncTransactionsToHub(){
   // Sync subscriptions to hub
   try{
     var existingSubs=await fetch("/api/hub-data?collection=subscriptions").then(function(r){return r.json()});
-    var existingSubNames=(existingSubs.items||[]).map(function(s){return normalizeDesc(s.name)});
+    var existingSubMap={};
+    (existingSubs.items||[]).forEach(function(s){existingSubMap[normalizeDesc(s.name)]=s});
 
     for(var sk in subGroups){
       var sg=subGroups[sk];
-      if(existingSubNames.indexOf(sk)===-1){
-        var avgSubAmt=Math.round(sg.total/sg.count*100)/100;
+      var avgSubAmt=Math.round(sg.total/sg.count*100)/100;
+      var subFreq=inferFrequency(sg.dates);
+      var lastCharged=dateToISO(sg.lastDate);
+      var existingSub=existingSubMap[sk];
+      if(!existingSub){
         await fetch("/api/hub-data?collection=subscriptions",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({action:"add",item:{name:sg.name,amount:avgSubAmt,frequency:"Monthly",status:"active",source:"upload",detectionStatus:"detected",confidence:sg.count>=3?"High":sg.count>=2?"Medium":"Low",lastChargedDate:sg.lastDate||"",occurrences:sg.count}})
+          body:JSON.stringify({action:"add",item:{name:sg.name,amount:avgSubAmt,frequency:subFreq,status:"active",source:"upload",detectionStatus:"detected",confidence:sg.count>=3?"High":sg.count>=2?"Medium":"Low",lastChargedDate:lastCharged,occurrences:sg.count}})
+        });
+      }else if(existingSub.detectionStatus==="detected"||!existingSub.detectionStatus){
+        existingSub.amount=avgSubAmt;
+        existingSub.frequency=existingSub.frequency||subFreq;
+        existingSub.confidence=sg.count>=3?"High":sg.count>=2?"Medium":"Low";
+        existingSub.lastChargedDate=lastCharged||existingSub.lastChargedDate||"";
+        existingSub.occurrences=sg.count;
+        existingSub.source="upload";
+        if(!existingSub.detectionStatus)existingSub.detectionStatus="detected";
+        await fetch("/api/hub-data?collection=subscriptions",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"update",item:existingSub})
         });
       }
     }
@@ -3153,21 +3368,39 @@ async function syncTransactionsToHub(){
   // Sync income sources to hub
   try{
     var existingIncome=await fetch("/api/hub-data?collection=income").then(function(r){return r.json()});
-    var existingIncomeNames=(existingIncome.items||[]).map(function(i){return normalizeDesc(i.name)});
+    var existingIncMap={};
+    (existingIncome.items||[]).forEach(function(i){existingIncMap[normalizeDesc(i.name)]=i});
 
     for(var ik in incomeGroups){
       var ig=incomeGroups[ik];
-      if(existingIncomeNames.indexOf(ik)===-1){
-        var avgIncAmt=Math.round(ig.total/ig.count*100)/100;
-        var incType=ig.category==="Income"?"Salary":"Irregular Income";
-        if(ig.name.toLowerCase().match(/freelance|invoice|contract/))incType="Freelance Income";
-        if(ig.name.toLowerCase().match(/refund|cashback|reversal/))incType="Irregular Income";
-        if(ig.name.toLowerCase().match(/interest|dividend/))incType="Passive Income";
-        var freq=ig.count>=2?"monthly":"one-off";
+      var avgIncAmt=Math.round(ig.total/ig.count*100)/100;
+      var incType=ig.category==="Income"?"Salary":"Irregular Income";
+      if(ig.name.toLowerCase().match(/freelance|invoice|contract/))incType="Freelance Income";
+      if(ig.name.toLowerCase().match(/refund|cashback|reversal/))incType="Irregular Income";
+      if(ig.name.toLowerCase().match(/interest|dividend/))incType="Passive Income";
+      var incFreq=inferFrequency(ig.dates);
+      if(ig.count<2)incFreq="one-off";
+      var incLastDate=dateToISO(ig.lastDate);
+      var existingInc=existingIncMap[ik];
+      if(!existingInc){
         await fetch("/api/hub-data?collection=income",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({action:"add",item:{name:ig.name,type:incType,amount:avgIncAmt,frequency:freq,source:"upload"}})
+          body:JSON.stringify({action:"add",item:{name:ig.name,type:incType,amount:avgIncAmt,frequency:incFreq,source:"upload",detectionStatus:"detected",confidence:ig.count>=3?"High":ig.count>=2?"Medium":"Low",lastReceivedDate:incLastDate,occurrences:ig.count}})
+        });
+      }else if(existingInc.detectionStatus==="detected"||!existingInc.detectionStatus){
+        existingInc.amount=avgIncAmt;
+        existingInc.type=existingInc.type||incType;
+        existingInc.frequency=existingInc.frequency||incFreq;
+        existingInc.confidence=ig.count>=3?"High":ig.count>=2?"Medium":"Low";
+        existingInc.lastReceivedDate=incLastDate||existingInc.lastReceivedDate||"";
+        existingInc.occurrences=ig.count;
+        existingInc.source="upload";
+        if(!existingInc.detectionStatus)existingInc.detectionStatus="detected";
+        await fetch("/api/hub-data?collection=income",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({action:"update",item:existingInc})
         });
       }
     }
