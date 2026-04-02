@@ -2062,6 +2062,12 @@ function bindHubEvents(){
     e.preventDefault();
     openReviewWizard();
   });
+  // Upload from hub empty state buttons
+  document.querySelectorAll(".upload-from-hub").forEach(function(el){
+    el.addEventListener("click",function(){
+      hubSection=null;cv='upload';document.querySelectorAll('.ni').forEach(function(e){e.classList.toggle('on',e.dataset.v==='upload')});destroyCharts();render();
+    });
+  });
   // Bind section-specific events
   if(hubSection==="budget")bindBudgetEvents();
   if(hubSection==="subscriptions")bindSubscriptionsEvents();
@@ -2179,7 +2185,7 @@ function incomeView(){
       html+='</div>';
     }
   } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected income sources from statements yet. Upload a bank statement to automatically detect recurring income.</div>';
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected income sources from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
   }
   html+='</div>';
 
@@ -2443,7 +2449,7 @@ function subscriptionsView(){
       html+='</div>';
     }
   } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected subscriptions from statements yet. Upload a bank statement to automatically detect recurring payments.</div>';
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected subscriptions from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
   }
   html+='</div>';
 
@@ -2863,7 +2869,7 @@ function billsView(){
       html+='</div>';
     }
   } else {
-    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected bills from statements yet. Upload a bank statement to automatically detect recurring bill payments.</div>';
+    html+='<div style="text-align:center;padding:20px 16px;color:var(--muted);font-size:12px">No detected bills from statements yet.<br><span class="upload-from-hub" style="display:inline-block;margin-top:10px;padding:8px 18px;border-radius:8px;background:var(--purple);color:#fff;font-size:12px;font-weight:600;cursor:pointer">Upload a Bank Statement</span></div>';
   }
   html+='</div>';
 
@@ -3456,7 +3462,11 @@ async function syncTransactionsToHub(){
 // Load saved transactions on page load
 (async function(){
   var loaded=await loadTransactionsFromBlobs();
-  if(loaded)render();
+  if(loaded){
+    render();
+    // Re-sync detected items (bills, subscriptions, income) from uploaded transactions
+    syncTransactionsToHub().then(function(){render()});
+  }
 })();
 render();
 </script>
