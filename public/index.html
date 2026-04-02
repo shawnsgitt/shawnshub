@@ -2236,67 +2236,104 @@ function subscriptionsView(){
   var items=data.items||[];
   var html=hubBackBtn("Subscriptions");
 
-  // Also check for subscription spending from confirmed transactions
-  var txnSubTotal=0;
-  if(D&&D.transactions){
-    var confirmedSubs=D.transactions.filter(function(t){return t.confirmed!==false&&t.category==="Subscriptions"});
-    txnSubTotal=confirmedSubs.reduce(function(s,t){return s+txAmt(t)},0);
+  // Separate items by detection state
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_subscription"});
+
+  var activeConfirmed=confirmed.filter(function(i){return i.status==="active"});
+  var inactiveConfirmed=confirmed.filter(function(i){return i.status!=="active"});
+  var totalActiveMonthly=activeConfirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+
+  // ─── Detected layer summary cards ───
+  if(detected.length>0){
+    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
+    html+='<div class="summary-grid fi">';
+    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Spend Detected</div></div>';
+    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Subscriptions</div></div>';
+    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
+    html+='</div>';
   }
 
-  // Summary
-  var totalActive=items.filter(function(i){return i.status==="active"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var totalAll=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var activeCount=items.filter(function(i){return i.status==="active"}).length;
-
+  // ─── Confirmed layer summary cards ───
+  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
   html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActive)+'</div><div class="ss-label">Active Monthly</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeCount+'</div><div class="ss-label">Active Subscriptions</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActive*12)+'</div><div class="ss-label">Yearly Cost</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.2)"><div class="ss-val" style="color:var(--purple)">'+items.length+'</div><div class="ss-label">Total Tracked</div></div>';
-  if(txnSubTotal>0){
-    html+='<div class="summary-stat" style="border-color:rgba(59,130,246,.2)"><div class="ss-val" style="color:var(--blue)">'+f(txnSubTotal)+'</div><div class="ss-label">From Statements</div></div>';
-  }
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActiveMonthly)+'</div><div class="ss-label">Active Monthly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeConfirmed.length+'</div><div class="ss-label">Active Subscriptions</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActiveMonthly*12)+'</div><div class="ss-label">Estimated Yearly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+confirmed.length+'</div><div class="ss-label">Total Tracked</div></div>';
   html+='</div>';
 
-  // Show transactions detected from upload
-  var uploadDetected=items.filter(function(i){return i.source==="upload"});
-  if(uploadDetected.length>0){
-    html+='<div style="background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)"><strong style="color:var(--purple)">'+uploadDetected.length+' subscription'+(uploadDetected.length!==1?'s':'')+' auto-detected</strong> from your uploaded bank statement</div>';
+  // ─── Section A: Detected from statements ───
+  if(detected.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected from uploaded statements</div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These recurring or likely subscription payments were found in your statements. Review and confirm to start tracking them.</div>';
+    detected.forEach(function(it){
+      var conf=it.confidence||"Medium";
+      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
+      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
+      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
+      html+='<div class="item-detail">'+escHtml(it.frequency||"Monthly");
+      if(it.lastChargedDate)html+=' &middot; Last charged: '+escHtml(it.lastChargedDate);
+      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
+      html+='</div>';
+      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
+      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
+      html+='</div>';
+      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
+      html+='<button class="btn-sm btn-edit" data-confirm-sub="'+it.id+'" style="background:var(--green);color:#fff">Confirm</button>';
+      html+='<button class="btn-sm btn-edit" data-edit-detected-sub="'+it.id+'">Edit</button>';
+      html+='<button class="btn-sm" data-dismiss-sub="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
+      html+='<button class="btn-sm" data-notsub="'+it.id+'" style="color:var(--dim);font-size:10px">Not a subscription</button>';
+      html+='</div></div>';
+    });
+    html+='</div>';
   }
 
-  // Add form
-  html+='<div class="ccard fi"><h3>Add Subscription</h3>';
+  // ─── Section B: Confirmed / tracked ───
+  if(activeConfirmed.length>0){
+    html+='<div class="sec fi"><div class="stitle">Active Subscriptions</div>';
+    activeConfirmed.forEach(function(it){
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--cyan)">'+f(it.amount)+'</div><div class="status-pill paid">active</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Pause</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+
+  if(inactiveConfirmed.length>0){
+    html+='<div class="sec fi"><div class="stitle">Paused / Cancelled</div>';
+    inactiveConfirmed.forEach(function(it){
+      var statusClass=it.status==="paused"?"pending":"overdue";
+      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--dim)">'+f(it.amount)+'</div><div class="status-pill '+statusClass+'">'+it.status+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Reactivate</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
+    });
+    html+='</div>';
+  }
+
+  // ─── Section C: Add manually ───
+  html+='<div class="ccard fi"><h3>Add subscription manually</h3>';
   html+='<div class="form-group"><label class="form-label">Service Name</label><input class="form-input" id="subName" placeholder="e.g. Netflix, Spotify, Adobe"></div>';
   html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="subAmt" type="number" step="0.01" placeholder="0.00"></div>';
   html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="subFreq"><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option><option value="Weekly">Weekly</option><option value="Quarterly">Quarterly</option></select></div>';
   html+='<div class="form-group"><label class="form-label">Category</label><select class="form-select" id="subCat"><option value="Entertainment">Entertainment</option><option value="Streaming">Streaming</option><option value="Software">Software</option><option value="Music">Music</option><option value="Cloud Storage">Cloud Storage</option><option value="Gaming">Gaming</option><option value="News & Media">News & Media</option><option value="Fitness">Fitness</option><option value="Other">Other</option></select></div>';
-  html+='<div class="form-group"><label class="form-label">Status</label><select class="form-select" id="subStatus"><option value="active">Active</option><option value="paused">Paused</option><option value="cancelled">Cancelled</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Billing Date (day of month)</label><input class="form-input" id="subBillDate" type="number" min="1" max="31" placeholder="1-31"></div>';
+  html+='<div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="subRenewal" type="date"></div>';
+  html+='<div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="subNotes" placeholder="Any notes about this subscription"></div>';
   html+='<button class="btn-primary" id="subAdd">Add Subscription</button></div>';
 
-  // List subscriptions
-  if(items.length>0){
-    var active=items.filter(function(i){return i.status==="active"});
-    var inactive=items.filter(function(i){return i.status!=="active"});
-
-    if(active.length>0){
-      html+='<div class="sec fi"><div class="stitle">Active Subscriptions</div>';
-      active.forEach(function(it){
-        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--cyan)">'+f(it.amount)+'</div><div class="status-pill paid">active</div></div></div>';
-        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Pause</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
-      });
-      html+='</div>';
-    }
-
-    if(inactive.length>0){
-      html+='<div class="sec fi"><div class="stitle">Paused / Cancelled</div>';
-      inactive.forEach(function(it){
-        var statusClass=it.status==="paused"?"pending":"overdue";
-        html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--dim)">'+f(it.amount)+'</div><div class="status-pill '+statusClass+'">'+it.status+'</div></div></div>';
-        html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Reactivate</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
-      });
-      html+='</div>';
-    }
+  // ─── Dismissed items (collapsed) ───
+  if(dismissed.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
+    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a subscription.</div>';
+    dismissed.forEach(function(it){
+      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"?"Marked as not a subscription":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm" data-restore-sub="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Delete</button></div></div>';
+    });
+    html+='</div>';
   }
+
   return html;
 }
 
@@ -2306,14 +2343,88 @@ function bindSubscriptionsEvents(){
     var name=document.getElementById("subName").value.trim();
     if(!name){toast("Please enter subscription name",true);return}
     addBtn.disabled=true;
-    await hubAdd("subscriptions",{name:name,amount:parseFloat(document.getElementById("subAmt").value)||0,frequency:document.getElementById("subFreq").value,subCategory:document.getElementById("subCat").value,status:document.getElementById("subStatus").value});
+    await hubAdd("subscriptions",{name:name,amount:parseFloat(document.getElementById("subAmt").value)||0,frequency:document.getElementById("subFreq").value,subCategory:document.getElementById("subCat").value,status:"active",source:"manual",detectionStatus:"confirmed",billingDate:document.getElementById("subBillDate")?document.getElementById("subBillDate").value:"",renewalDate:document.getElementById("subRenewal")?document.getElementById("subRenewal").value:"",notes:document.getElementById("subNotes")?document.getElementById("subNotes").value.trim():""});
     await hubLoad("subscriptions");toast("Subscription added");render();
   });
+  // Confirm detected subscription
+  document.querySelectorAll("[data-confirm-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.confirmSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      item.status="active";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Subscription confirmed and now tracked");render();
+    });
+  });
+  // Edit detected subscription
+  document.querySelectorAll("[data-edit-detected-sub]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editDetectedSub});
+      if(!item)return;
+      var newName=prompt("Subscription name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      var newFreq=prompt("Frequency (Monthly/Yearly/Weekly/Quarterly):",item.frequency||"Monthly");
+      if(newFreq===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.frequency=newFreq||item.frequency;
+      item.detectionStatus="edited_confirmed";
+      item.status="active";
+      hubUpdate("subscriptions",item).then(function(){hubLoad("subscriptions").then(function(){toast("Subscription edited and confirmed");render()})});
+    });
+  });
+  // Dismiss detected subscription
+  document.querySelectorAll("[data-dismiss-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.dismissSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      item.status="cancelled";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Dismissed");render();
+    });
+  });
+  // Mark as not a subscription
+  document.querySelectorAll("[data-notsub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.notsub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="not_subscription";
+      item.status="cancelled";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Marked as not a subscription");render();
+    });
+  });
+  // Restore dismissed item back to detected
+  document.querySelectorAll("[data-restore-sub]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["subscriptions"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.restoreSub});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      item.status="active";
+      await hubUpdate("subscriptions",item);
+      await hubLoad("subscriptions");toast("Restored for review");render();
+    });
+  });
+  // Delete subscription
   document.querySelectorAll("[data-del-sub]").forEach(function(b){
     b.addEventListener("click",async function(){
       await hubDelete("subscriptions",b.dataset.delSub);await hubLoad("subscriptions");toast("Removed");render();
     });
   });
+  // Toggle active/paused for confirmed subscriptions
   document.querySelectorAll("[data-toggle-sub]").forEach(function(b){
     b.addEventListener("click",function(){
       var items=(hubCache["subscriptions"]||{items:[]}).items;
@@ -2541,32 +2652,122 @@ function billsView(){
   var items=data.items||[];
   var html=hubBackBtn("Bills & Due Dates");
 
-  var totalBills=items.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
-  var overdue=items.filter(function(i){return getBillStatus(i)==="overdue"}).length;
+  // Separate items by detection state
+  var detected=items.filter(function(i){return i.detectionStatus==="detected"||i.detectionStatus==="awaiting_review"});
+  var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
+  var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_bill"});
+
+  var today=new Date().getDate();
+  var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var overdue=confirmed.filter(function(i){return getBillStatus(i)==="overdue"}).length;
+  var upcoming=confirmed.filter(function(i){
+    var due=parseInt(i.dueDate)||0;
+    return due>=today&&due<=today+7&&getBillStatus(i)!=="paid";
+  });
+  var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+
+  // ─── Detected layer summary cards ───
+  if(detected.length>0){
+    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
+    html+='<div class="summary-grid fi">';
+    html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Bills Detected</div></div>';
+    html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Bills Awaiting Review</div></div>';
+    html+='</div>';
+  }
+
+  // ─── Confirmed layer summary cards ───
+  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
   html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalBills)+'</div><div class="ss-label">Monthly Bills</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedTotal)+'</div><div class="ss-label">Confirmed Monthly Bills</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+upcoming.length+'</div><div class="ss-label">Upcoming Due</div></div>';
   html+='<div class="summary-stat" style="border-color:'+(overdue>0?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)")+'"><div class="ss-val" style="color:'+(overdue>0?"var(--red)":"var(--green)")+'">'+(overdue>0?overdue+" overdue":"All good")+'</div><div class="ss-label">Status</div></div>';
   html+='</div>';
 
-  html+='<div class="ccard fi"><h3>Add Bill</h3>';
-  html+='<div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="billName" placeholder="e.g. Rent, Netflix, Electricity"></div>';
-  html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="billAmt" type="number" step="0.01" placeholder="0.00"></div>';
-  html+='<div class="form-group"><label class="form-label">Due Date (day of month)</label><input class="form-input" id="billDue" type="number" min="1" max="31" placeholder="1-31"></div>';
-  html+='<div class="form-group"><label class="form-label">Payment Method</label><select class="form-select" id="billMethod"><option value="Auto-pay (Direct Debit)">Auto-pay (Direct Debit)</option><option value="Manual">Manual</option><option value="Standing Order">Standing Order</option></select></div>';
-  html+='<div class="form-group"><label class="form-label">Status</label><select class="form-select" id="billStatus"><option value="paid">Paid</option><option value="pending">Pending</option><option value="overdue">Overdue</option></select></div>';
-  html+='<button class="btn-primary" id="billAdd">Add Bill</button></div>';
-
-  if(items.length>0){
-    // Sort by due date
-    var sorted=items.slice().sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)});
-    html+='<div class="sec fi"><div class="stitle">Recurring Bills</div>';
-    sorted.forEach(function(it){
-      var status=it.status||"pending";
-      html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">Due: day '+(it.dueDate||"?")+ ' &middot; '+escHtml(it.method||"Manual")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700">'+f(it.amount)+'</div><div class="status-pill '+status+'">'+status+'</div></div></div>';
-      html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-bill="'+it.id+'">Toggle Status</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Remove</button></div></div>';
+  // ─── Section A: Detected bills from statements ───
+  if(detected.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected bills from uploaded statements</div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These recurring bill-like payments were found in your statements. Review and confirm to start tracking due dates and totals.</div>';
+    detected.forEach(function(it){
+      var conf=it.confidence||"Medium";
+      var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
+      html+='<div class="item-card" style="border-left:3px solid var(--purple)">';
+      html+='<div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div>';
+      html+='<div class="item-detail">'+escHtml(it.method||"Auto-detected from statement");
+      if(it.lastPaidDate)html+=' &middot; Last paid: '+escHtml(it.lastPaidDate);
+      if(it.occurrences)html+=' &middot; Seen '+it.occurrences+'x';
+      html+='</div>';
+      html+='<div style="margin-top:4px"><span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.12);color:var(--purple);font-weight:600">Detected</span>';
+      html+=' <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(168,85,247,.06);color:'+confColor+';font-weight:600">'+conf+' confidence</span></div>';
+      html+='</div>';
+      html+='<div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--purple)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions" style="flex-wrap:wrap;gap:6px">';
+      html+='<button class="btn-sm btn-edit" data-confirm-bill="'+it.id+'" style="background:var(--green);color:#fff">Confirm as bill</button>';
+      html+='<button class="btn-sm btn-edit" data-edit-detected-bill="'+it.id+'">Edit</button>';
+      html+='<button class="btn-sm" data-dismiss-bill="'+it.id+'" style="color:var(--muted)">Dismiss</button>';
+      html+='<button class="btn-sm" data-notbill="'+it.id+'" style="color:var(--dim);font-size:10px">Not a bill</button>';
+      html+='</div></div>';
     });
     html+='</div>';
   }
+
+  // ─── Section B: Confirmed / tracked bills ───
+  // Show overdue first
+  var overdueItems=confirmed.filter(function(i){return getBillStatus(i)==="overdue"});
+  var upcomingItems=confirmed.filter(function(i){return getBillStatus(i)==="pending"});
+  var paidItems=confirmed.filter(function(i){return getBillStatus(i)==="paid"});
+
+  if(overdueItems.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--red)">Overdue Bills</div>';
+    overdueItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderBillCard(it);
+    });
+    html+='</div>';
+  }
+
+  if(upcomingItems.length>0){
+    html+='<div class="sec fi"><div class="stitle">Upcoming Confirmed Bills</div>';
+    upcomingItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderBillCard(it);
+    });
+    html+='</div>';
+  }
+
+  if(paidItems.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--green)">Paid This Month</div>';
+    paidItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
+      html+=renderBillCard(it);
+    });
+    html+='</div>';
+  }
+
+  // ─── Section C: Add manually ───
+  html+='<div class="ccard fi"><h3>Add bill manually</h3>';
+  html+='<div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="billName" placeholder="e.g. Rent, Electricity, Council Tax"></div>';
+  html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="billAmt" type="number" step="0.01" placeholder="0.00"></div>';
+  html+='<div class="form-group"><label class="form-label">Due Date (day of month)</label><input class="form-input" id="billDue" type="number" min="1" max="31" placeholder="1-31"></div>';
+  html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="billFreq"><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Yearly">Yearly</option><option value="Weekly">Weekly</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Payment Method</label><select class="form-select" id="billMethod"><option value="Auto-pay (Direct Debit)">Auto-pay (Direct Debit)</option><option value="Manual">Manual</option><option value="Standing Order">Standing Order</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="billNotes" placeholder="Any notes about this bill"></div>';
+  html+='<button class="btn-primary" id="billAdd">Add Bill</button></div>';
+
+  // ─── Dismissed items (collapsed) ───
+  if(dismissed.length>0){
+    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
+    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a bill.</div>';
+    dismissed.forEach(function(it){
+      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"?"Marked as not a bill":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+      html+='<div class="item-actions"><button class="btn-sm" data-restore-bill="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Delete</button></div></div>';
+    });
+    html+='</div>';
+  }
+
+  return html;
+}
+
+function renderBillCard(it){
+  var status=it.status||"pending";
+  var html='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">Due: day '+(it.dueDate||"?")+ ' &middot; '+escHtml(it.method||"Manual")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700">'+f(it.amount)+'</div><div class="status-pill '+status+'">'+status+'</div></div></div>';
+  html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-bill="'+it.id+'">Toggle Status</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Remove</button></div></div>';
   return html;
 }
 
@@ -2580,14 +2781,86 @@ function bindBillsEvents(){
     var name=document.getElementById("billName").value.trim();
     if(!name){toast("Please enter bill name",true);return}
     addBtn.disabled=true;
-    await hubAdd("bills",{name:name,amount:parseFloat(document.getElementById("billAmt").value)||0,dueDate:document.getElementById("billDue").value||"",method:document.getElementById("billMethod").value,status:document.getElementById("billStatus").value});
+    await hubAdd("bills",{name:name,amount:parseFloat(document.getElementById("billAmt").value)||0,dueDate:document.getElementById("billDue").value||"",frequency:document.getElementById("billFreq")?document.getElementById("billFreq").value:"Monthly",method:document.getElementById("billMethod").value,status:"pending",source:"manual",detectionStatus:"confirmed",notes:document.getElementById("billNotes")?document.getElementById("billNotes").value.trim():""});
     await hubLoad("bills");toast("Bill added");render();
   });
+  // Confirm detected bill
+  document.querySelectorAll("[data-confirm-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.confirmBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="confirmed";
+      item.status="pending";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Bill confirmed and now tracked");render();
+    });
+  });
+  // Edit detected bill
+  document.querySelectorAll("[data-edit-detected-bill]").forEach(function(b){
+    b.addEventListener("click",function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.editDetectedBill});
+      if(!item)return;
+      var newName=prompt("Bill name:",item.name||"");
+      if(newName===null)return;
+      var newAmt=prompt("Amount (£):",item.amount||"");
+      if(newAmt===null)return;
+      var newDue=prompt("Due date (day of month, 1-31):",item.dueDate||"");
+      if(newDue===null)return;
+      item.name=newName.trim()||item.name;
+      item.amount=parseFloat(newAmt)||item.amount;
+      item.dueDate=newDue||item.dueDate;
+      item.detectionStatus="edited_confirmed";
+      item.status="pending";
+      hubUpdate("bills",item).then(function(){hubLoad("bills").then(function(){toast("Bill edited and confirmed");render()})});
+    });
+  });
+  // Dismiss detected bill
+  document.querySelectorAll("[data-dismiss-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.dismissBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="dismissed";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Dismissed");render();
+    });
+  });
+  // Mark as not a bill
+  document.querySelectorAll("[data-notbill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.notbill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="not_bill";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Marked as not a bill");render();
+    });
+  });
+  // Restore dismissed item back to detected
+  document.querySelectorAll("[data-restore-bill]").forEach(function(b){
+    b.addEventListener("click",async function(){
+      var items=(hubCache["bills"]||{items:[]}).items;
+      var item=items.find(function(i){return i.id===b.dataset.restoreBill});
+      if(!item)return;
+      b.disabled=true;
+      item.detectionStatus="detected";
+      item.status="pending";
+      await hubUpdate("bills",item);
+      await hubLoad("bills");toast("Restored for review");render();
+    });
+  });
+  // Delete bill
   document.querySelectorAll("[data-del-bill]").forEach(function(b){
     b.addEventListener("click",async function(){
       await hubDelete("bills",b.dataset.delBill);await hubLoad("bills");toast("Removed");render();
     });
   });
+  // Toggle bill status
   document.querySelectorAll("[data-toggle-bill]").forEach(function(b){
     b.addEventListener("click",function(){
       var items=(hubCache["bills"]||{items:[]}).items;
@@ -2806,11 +3079,12 @@ async function syncTransactionsToHub(){
   billTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!billGroups[key]){
-      billGroups[key]={name:t.description,total:0,count:0,amounts:[]};
+      billGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:""};
     }
     billGroups[key].total+=txAmt(t);
     billGroups[key].count++;
     billGroups[key].amounts.push(txAmt(t));
+    if(t.date&&t.date>billGroups[key].lastDate)billGroups[key].lastDate=t.date;
   });
 
   // Extract subscriptions
@@ -2819,11 +3093,12 @@ async function syncTransactionsToHub(){
   subTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!subGroups[key]){
-      subGroups[key]={name:t.description,total:0,count:0,amounts:[]};
+      subGroups[key]={name:t.description,total:0,count:0,amounts:[],lastDate:""};
     }
     subGroups[key].total+=txAmt(t);
     subGroups[key].count++;
     subGroups[key].amounts.push(txAmt(t));
+    if(t.date&&t.date>subGroups[key].lastDate)subGroups[key].lastDate=t.date;
   });
 
   // Extract income sources
@@ -2851,7 +3126,7 @@ async function syncTransactionsToHub(){
         await fetch("/api/hub-data?collection=bills",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({action:"add",item:{name:bg.name,amount:avgAmt,dueDate:"",method:"Auto-detected from statement",status:"pending",source:"upload"}})
+          body:JSON.stringify({action:"add",item:{name:bg.name,amount:avgAmt,dueDate:"",method:"Auto-detected from statement",status:"pending",source:"upload",detectionStatus:"detected",confidence:bg.count>=3?"High":bg.count>=2?"Medium":"Low",lastPaidDate:bg.lastDate||"",occurrences:bg.count}})
         });
       }
     }
@@ -2869,7 +3144,7 @@ async function syncTransactionsToHub(){
         await fetch("/api/hub-data?collection=subscriptions",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({action:"add",item:{name:sg.name,amount:avgSubAmt,frequency:"Monthly",status:"active",source:"upload"}})
+          body:JSON.stringify({action:"add",item:{name:sg.name,amount:avgSubAmt,frequency:"Monthly",status:"active",source:"upload",detectionStatus:"detected",confidence:sg.count>=3?"High":sg.count>=2?"Medium":"Low",lastChargedDate:sg.lastDate||"",occurrences:sg.count}})
         });
       }
     }
