@@ -45,6 +45,57 @@ function isBalanceCarriedForward(description) {
   return BALANCE_CF_PATTERNS.some(p => lower.includes(p));
 }
 
+// ───────── SUMMARY / TOTALS ROW DETECTION ─────────
+// These rows summarise transaction totals and must NOT be treated as balances or transactions
+const SUMMARY_ROW_PATTERNS = [
+  "totals (excluding opening/closing balance rows)",
+  "totals (excluding opening/closing",
+  "totals (excl opening",
+  "totals (excl. opening",
+  "total (excluding",
+  "totals excluding",
+  "transaction totals",
+  "statement totals",
+  "summary totals",
+  "grand total",
+  "sub total",
+  "subtotal",
+];
+
+function isSummaryTotalsRow(description) {
+  const lower = (description || "").toLowerCase();
+  return SUMMARY_ROW_PATTERNS.some(p => lower.includes(p));
+}
+
+// ───────── OPENING / CLOSING BALANCE ROW DETECTION ─────────
+// Detect rows that represent opening or closing balances by Type column or description
+const OPENING_PATTERNS = [
+  "balance brought forward", "balance b/f", "balance b/d",
+  "brought forward", "brought down",
+  "opening balance", "ob ",
+  "balance from previous", "previous balance", "last balance",
+];
+const CLOSING_PATTERNS = [
+  "balance carried forward", "balance c/f", "balance c/d",
+  "carried forward", "carried down",
+  "closing balance", "cb ",
+];
+
+function detectBalanceRowType(description, typeValue) {
+  const lowerDesc = (description || "").toLowerCase();
+  const lowerType = (typeValue || "").toLowerCase().trim();
+
+  // Check Type column first (highest priority)
+  if (lowerType === "opening") return "opening";
+  if (lowerType === "closing") return "closing";
+
+  // Then check description patterns
+  if (OPENING_PATTERNS.some(p => lowerDesc.includes(p))) return "opening";
+  if (CLOSING_PATTERNS.some(p => lowerDesc.includes(p))) return "closing";
+
+  return null;
+}
+
 // Category keywords for auto-categorization — extensive list for maximum auto-match
 const CATEGORY_RULES = [
   { category: "Groceries", keywords: ["tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose", "co-op", "coop", "ocado", "m&s food", "marks & spencer food", "iceland", "spar", "costco", "grocery", "supermarket", "farm foods", "whole foods", "wholefoods", "shoprite", "pick n pay", "checkers", "woolworths food", "food lover", "fruit & veg", "butcher", "bakery", "market", "fresh", "farmfoods", "heron foods", "jack's", "booths", "nisa"] },
@@ -535,6 +586,50 @@ function parseExcelSheet(rows, headers, learnedMappings) {
   // Track whether we're using separate debit/credit columns
   const hasSeparateDebitCredit = (debitCol >= 0 || creditCol >= 0) && amountCol < 0;
 
+  // ───── Row classification & balance extraction (before any filtering) ─────
+  // We classify every data row BEFORE building transactions so that
+  // opening/closing balances are never lost due to summary-row filtering.
+  let openingBalance = null;
+  let closingBalance = null;
+  let openingBalanceRow = null;
+  let closingBalanceRow = null;
+  let summaryTotalsRow = null;
+  let summaryTotalPaidIn = null;
+  let summaryTotalPaidOut = null;
+  const balanceRows = [];
+
+  // Pre-scan: identify balance rows, summary rows, extract balances
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const values = headers.map((h) => row[h]);
+    const rawDesc = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
+    const typeValue = typeCol >= 0 ? String(values[typeCol] || "").trim() : "";
+    const balanceValue = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
+
+    // Check for summary totals row (e.g. "TOTALS (excluding opening/closing balance rows)")
+    if (isSummaryTotalsRow(rawDesc)) {
+      const paidOut = debitCol >= 0 ? parseAmount(values[debitCol]) : null;
+      const paidIn = creditCol >= 0 ? parseAmount(values[creditCol]) : null;
+      summaryTotalsRow = { rowIndex: i, description: rawDesc };
+      if (paidIn != null && paidIn !== 0) summaryTotalPaidIn = Math.abs(paidIn);
+      if (paidOut != null && paidOut !== 0) summaryTotalPaidOut = Math.abs(paidOut);
+      continue; // classified — skip further checks for this row
+    }
+
+    // Check for opening / closing balance rows
+    const balRowType = detectBalanceRowType(rawDesc, typeValue);
+    if (balRowType) {
+      balanceRows.push({ rowIndex: i, type: balRowType, description: rawDesc, balance: balanceValue });
+      if (balRowType === "opening" && balanceValue != null) {
+        openingBalance = balanceValue;
+        openingBalanceRow = { rowIndex: i, description: rawDesc };
+      } else if (balRowType === "closing" && balanceValue != null) {
+        closingBalance = balanceValue;
+        closingBalanceRow = { rowIndex: i, description: rawDesc };
+      }
+    }
+  }
+
   // ── First pass: parse raw amounts and dates with tracking ──
   const rawEntries = [];
   let validDateCount = 0;
@@ -544,6 +639,10 @@ function parseExcelSheet(rows, headers, learnedMappings) {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const values = headers.map((h) => row[h]);
+
+    // Skip summary totals rows — they are NOT transactions
+    const rawDescCheck = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
+    if (isSummaryTotalsRow(rawDescCheck)) continue;
 
     const rawDate = values[dateCol];
     const parsedDate = parseDate(rawDate, dateOrder);
@@ -681,6 +780,21 @@ function parseExcelSheet(rows, headers, learnedMappings) {
       dateOrder,
       dateRangeMin,
       dateRangeMax,
+      // Balance detection results
+      openingBalance,
+      closingBalance,
+      openingBalanceRow,
+      closingBalanceRow,
+      balanceRows: balanceRows.map(r => ({ type: r.type, description: r.description, balance: r.balance })),
+      balanceSource: (openingBalance != null || closingBalance != null)
+        ? "Balance (£) column from OPENING/CLOSING rows"
+        : (balanceCol >= 0 ? "Balance (£) column (running balance)" : "none"),
+      hasRunningBalance: balanceCol >= 0,
+      // Summary totals row detection
+      summaryTotalsRowDetected: summaryTotalsRow != null,
+      summaryTotalsRow,
+      summaryTotalPaidIn,
+      summaryTotalPaidOut,
     },
   };
 }
@@ -738,6 +852,19 @@ async function parseExcel(buffer) {
     dateOrder: null,
     dateRangeMin: null,
     dateRangeMax: null,
+    // Balance detection (aggregated across sheets)
+    openingBalance: null,
+    closingBalance: null,
+    openingBalanceRow: null,
+    closingBalanceRow: null,
+    balanceRows: [],
+    balanceSource: "none",
+    hasRunningBalance: false,
+    // Summary totals row detection
+    summaryTotalsRowDetected: false,
+    summaryTotalsRow: null,
+    summaryTotalPaidIn: null,
+    summaryTotalPaidOut: null,
   };
 
   // Load learned category mappings for smart auto-categorization
@@ -789,6 +916,29 @@ async function parseExcel(buffer) {
         }
         if (ps.dateRangeMax && (!aggregateParseStats.dateRangeMax || ps.dateRangeMax > aggregateParseStats.dateRangeMax)) {
           aggregateParseStats.dateRangeMax = ps.dateRangeMax;
+        }
+        // Aggregate balance detection results
+        if (ps.openingBalance != null && aggregateParseStats.openingBalance == null) {
+          aggregateParseStats.openingBalance = ps.openingBalance;
+          aggregateParseStats.openingBalanceRow = ps.openingBalanceRow ? { ...ps.openingBalanceRow, sheet: sheetName } : null;
+        }
+        if (ps.closingBalance != null && aggregateParseStats.closingBalance == null) {
+          aggregateParseStats.closingBalance = ps.closingBalance;
+          aggregateParseStats.closingBalanceRow = ps.closingBalanceRow ? { ...ps.closingBalanceRow, sheet: sheetName } : null;
+        }
+        if (ps.balanceRows && ps.balanceRows.length > 0) {
+          aggregateParseStats.balanceRows.push(...ps.balanceRows.map(r => ({ ...r, sheet: sheetName })));
+        }
+        if (ps.balanceSource && ps.balanceSource !== "none") {
+          aggregateParseStats.balanceSource = ps.balanceSource;
+        }
+        if (ps.hasRunningBalance) aggregateParseStats.hasRunningBalance = true;
+        // Aggregate summary totals row
+        if (ps.summaryTotalsRowDetected) {
+          aggregateParseStats.summaryTotalsRowDetected = true;
+          aggregateParseStats.summaryTotalsRow = ps.summaryTotalsRow ? { ...ps.summaryTotalsRow, sheet: sheetName } : null;
+          if (ps.summaryTotalPaidIn != null) aggregateParseStats.summaryTotalPaidIn = ps.summaryTotalPaidIn;
+          if (ps.summaryTotalPaidOut != null) aggregateParseStats.summaryTotalPaidOut = ps.summaryTotalPaidOut;
         }
       }
     } catch (e) {

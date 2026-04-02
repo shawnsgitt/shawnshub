@@ -242,7 +242,7 @@ function cc(n){return CC[n]||"#64748b"}
 function f(n){if(n==null||isNaN(n))return"£0";return"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
 
-var D=null,charts={},cv="home",selAcct="all";
+var D=null,charts={},cv="home",selAcct="all",selMonth=null;
 var hubSection=null; // tracks which "more" sub-section is active
 var hubCache={}; // in-memory cache of hub data loaded from API
 var hubForms={}; // tracks form states
@@ -309,6 +309,19 @@ function bindAcctSelector(){
   document.querySelectorAll(".acct-pill").forEach(function(pill){
     pill.addEventListener("click",function(){
       selAcct=pill.dataset.acct;
+      selMonth=null;
+      destroyCharts();render();
+    });
+  });
+}
+
+function bindMonthSelector(){
+  document.querySelectorAll(".month-pill").forEach(function(pill){
+    pill.addEventListener("click",function(){
+      var parts=pill.dataset.my.split("-");
+      var m=parseInt(parts[0],10),y=parseInt(parts[1],10);
+      if(selMonth&&selMonth.m===m&&selMonth.y===y){selMonth=null;}
+      else{selMonth={m:m,y:y};}
       destroyCharts();render();
     });
   });
@@ -332,6 +345,7 @@ function render(){
   bindUpload();
   bindUncatClicks();
   bindAcctSelector();
+  bindMonthSelector();
   bindTxnEvents();
   bindHubEvents();
 }
@@ -355,6 +369,7 @@ function isDebtAccount(name){
 }
 
 function latestMonth(){
+  if(selMonth)return selMonth;
   var all=filtered();
   if(!all.length){var now=new Date();return{y:now.getFullYear(),m:now.getMonth()+1};}
   var dates=all.filter(function(t){return !t.dateUnreadable&&t.date!=="UNREADABLE"}).map(function(t){
@@ -364,6 +379,33 @@ function latestMonth(){
   if(!dates.length){var now2=new Date();return{y:now2.getFullYear(),m:now2.getMonth()+1};}
   dates.sort(function(a,b){return b.y-a.y||b.m-a.m});
   return dates[0];
+}
+
+function availableMonths(){
+  var all=filtered();
+  if(!all.length)return[];
+  var map={};
+  all.filter(function(t){return !t.dateUnreadable&&t.date!=="UNREADABLE"}).forEach(function(t){
+    var p=t.date.split("/");
+    var y=parseInt(p[2],10),m=parseInt(p[1],10);
+    if(!isNaN(y)&&!isNaN(m)){var k=y*100+m;map[k]={y:y,m:m};}
+  });
+  var months=Object.keys(map).map(function(k){return map[k]});
+  months.sort(function(a,b){return b.y-a.y||b.m-a.m});
+  return months;
+}
+
+function monthSelector(){
+  var months=availableMonths();
+  if(months.length<=1)return"";
+  var lm=latestMonth();
+  var html='<div class="month-sel fi" style="display:flex;gap:6px;flex-wrap:wrap;padding:0 4px;margin-bottom:12px">';
+  months.forEach(function(mo){
+    var isOn=lm&&lm.y===mo.y&&lm.m===mo.m;
+    html+='<div class="month-pill'+(isOn?" on":"")+'" data-my="'+mo.m+'-'+mo.y+'" style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);color:'+(isOn?'var(--purple)':'var(--muted)')+';background:'+(isOn?'rgba(168,85,247,.1)':'transparent')+'">'+monthName(mo.m)+' '+mo.y+'</div>';
+  });
+  html+='</div>';
+  return html;
 }
 
 function monthlyTxns(){
@@ -400,9 +442,15 @@ function homeView(){
   });
   var netWorth=cashTotal-debtTotal;
   var hasBalanceData=!(netWorth===0&&cashTotal===0&&debtTotal===0&&D.transactions.length>0);
+  // Also consider opening/closing balance from parseStats (detected from OPENING/CLOSING rows)
+  var psOpenBal=(D.parseStats&&D.parseStats.openingBalance!=null)?D.parseStats.openingBalance:null;
+  var psCloseBal=(D.parseStats&&D.parseStats.closingBalance!=null)?D.parseStats.closingBalance:null;
+  if(!hasBalanceData&&(psOpenBal!=null||psCloseBal!=null))hasBalanceData=true;
+  // If we have closing balance from parseStats but no running balance in transactions, use it for net worth
+  if(netWorth===0&&cashTotal===0&&psCloseBal!=null){netWorth=psCloseBal;cashTotal=psCloseBal;}
   var nwHint="";
   if(!hasBalanceData){
-    nwHint='<div class="nw-sub" style="margin-top:4px;font-size:11px;color:var(--amber)">Your uploaded statements did not include balance columns &mdash; upload a statement with balances to calculate net worth</div>';
+    nwHint='<div class="nw-sub" style="margin-top:4px;font-size:11px;color:var(--amber)">Transactions were imported successfully, but no balance columns were detected in your statement. Upload a file that includes a running balance column to enable net worth tracking.</div>';
   }
 
   var mt=monthlyTxns();
@@ -455,22 +503,31 @@ function homeView(){
   (function(){
     if(!D||!D.parseStats)return'';
     var ps=D.parseStats;
+    var txnCount=D.transactions.length;
+    var validCount=ps.validDates;
+    var failedCount=ps.failedDates;
+    var totalParsed=validCount+failedCount;
     var lines=[];
-    lines.push('<strong>Transactions imported:</strong> '+D.transactions.length);
-    lines.push('<strong>Valid dates read:</strong> '+ps.validDates);
-    if(ps.failedDates>0)lines.push('<strong>Failed date rows:</strong> <span style="color:var(--red)">'+ps.failedDates+'</span>');
+    lines.push('<strong>Rows processed:</strong> '+ps.totalRows+(totalParsed!==ps.totalRows?' ('+totalParsed+' had date values)':''));
+    lines.push('<strong>Transactions imported:</strong> <span style="color:var(--green)">'+txnCount+'</span>'+(failedCount>0?' &middot; <span style="color:var(--red)">'+failedCount+' row'+(failedCount!==1?'s':'')+' failed date parsing</span>':''));
     if(ps.dateRangeMin&&ps.dateRangeMax){
       var minParts=ps.dateRangeMin.split("-");
       var maxParts=ps.dateRangeMax.split("-");
       var minLabel=minParts[2]+"/"+minParts[1]+"/"+minParts[0];
       var maxLabel=maxParts[2]+"/"+maxParts[1]+"/"+maxParts[0];
-      lines.push('<strong>Date range found:</strong> '+minLabel+' to '+maxLabel);
+      lines.push('<strong>Date range:</strong> '+minLabel+' &rarr; '+maxLabel);
     }
+    // Months covered
+    var mons=availableMonths();
+    if(mons.length>0)lines.push('<strong>Months covered:</strong> '+mons.length+' ('+monthName(mons[mons.length-1].m)+' '+mons[mons.length-1].y+' &ndash; '+monthName(mons[0].m)+' '+mons[0].y+')');
+    // Categorisation counts
+    var catConfirmed=D.transactions.filter(function(t){return t.confirmed===true}).length;
+    var catPending=D.transactions.filter(function(t){return t.confirmed===false&&t.category==="Pending Review"}).length;
+    var catUncategorized=D.transactions.filter(function(t){return t.category==="Uncategorized"}).length;
+    var catCategorised=D.transactions.filter(function(t){return t.confirmed===true&&t.category!=="Uncategorized"&&t.category!=="Pending Review"}).length;
+    lines.push('<strong>Categorised:</strong> <span style="color:var(--green)">'+catCategorised+'</span> &middot; <strong>Pending review:</strong> <span style="color:var(--amber)">'+catPending+'</span>'+(catUncategorized>0?' &middot; <strong>Uncategorised:</strong> <span style="color:var(--dim)">'+catUncategorized+'</span>':''));
     var lmNow=latestMonth();
-    if(lmNow)lines.push('<strong>Current month selected:</strong> '+monthName(lmNow.m)+' '+lmNow.y);
-    // Count matching txns for current month
-    var mCount=monthlyTxns().length;
-    lines.push('<strong>Matching transactions this month:</strong> '+(mCount>0?'<span style="color:var(--green)">'+mCount+'</span>':'<span style="color:var(--amber)">0</span>'));
+    if(lmNow)lines.push('<strong>Viewing month:</strong> '+monthName(lmNow.m)+' '+lmNow.y+' ('+monthlyTxns().length+' transaction'+(monthlyTxns().length!==1?'s':'')+')');
     // Date column info
     if(ps.dateColumnsUsed&&ps.dateColumnsUsed.length>0){
       var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+c.column+'" ('+c.type+') in '+c.sheet}).join(', ');
@@ -480,8 +537,19 @@ function homeView(){
       }
     }
     if(ps.dateOrder)lines.push('<strong>Date format detected:</strong> '+(ps.dateOrder==="day-first"?"Day-first (DD/MM/YYYY)":"Month-first (MM/DD/YYYY)"));
+    // Balance detection results
+    if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+ps.openingBalanceRow.description+')</span>':''));
+    if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+ps.closingBalanceRow.description+')</span>':''));
+    if(ps.openingBalance!=null||ps.closingBalance!=null)lines.push('<strong>Balance source:</strong> '+ps.balanceSource);
+    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+r.description+'"'}).join(', '));
+    if(ps.summaryTotalsRowDetected){
+      var sumLine='<strong>Totals summary row:</strong> <span style="color:var(--dim)">detected</span>';
+      if(ps.summaryTotalPaidIn!=null)sumLine+=' &middot; Paid in: '+f(ps.summaryTotalPaidIn);
+      if(ps.summaryTotalPaidOut!=null)sumLine+=' &middot; Paid out: '+f(ps.summaryTotalPaidOut);
+      lines.push(sumLine);
+    }
     // Failed rows detail
-    if(ps.failedDates>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
+    if(failedCount>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
       var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+r.rawValue+'"'+(r.sheet?' ('+r.sheet+')':'')}).join(', ');
       lines.push('<strong>Unreadable date examples:</strong> '+examples);
     }
@@ -498,7 +566,7 @@ function homeView(){
     '<div class="nw-sub">Cash minus debt</div>'
     :
     '<div class="nw-val" style="color:var(--dim);font-size:28px">&mdash;</div>'+
-    '<div class="nw-sub">Not enough data to calculate</div>'
+    '<div class="nw-sub">Balance columns not found in your import</div>'
     )+
     nwHint+
   '</div>'+
@@ -517,6 +585,7 @@ function homeView(){
 
   '<div class="snap-divider fi" style="animation-delay:.1s"></div>'+
   '<div class="snap-section-title fi" style="animation-delay:.1s">Monthly breakdown &middot; '+monthLabel+'</div>'+
+  monthSelector()+
 
   '<div class="snap-row fi" style="animation-delay:.12s">'+
     '<div class="snap-card green"><div class="sc-label">Income</div><div class="sc-val">'+f(mIncome)+'</div></div>'+
@@ -526,7 +595,7 @@ function homeView(){
 
   (mIncome>0||mSpending>0?
   '<div class="snap-row fi" style="animation-delay:.15s">'+
-    '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0&&!isNaN(leftAfter)?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
+    '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Net cash flow</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0&&!isNaN(leftAfter)?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
   '</div>'
   :
   '<div class="snap-row fi" style="animation-delay:.15s">'+
@@ -721,11 +790,20 @@ function uploadSummary(){
   var pending=pendingReview().length;
   var uncat=uncategorized().length;
   var needsReview=pending+uncat;
+  var catConfirmed=D.transactions.filter(function(t){return t.confirmed===true&&t.category!=="Uncategorized"&&t.category!=="Pending Review"}).length;
+  var catPending=D.transactions.filter(function(t){return t.confirmed===false&&t.category==="Pending Review"}).length;
+  var catUncategorized=D.transactions.filter(function(t){return t.category==="Uncategorized"}).length;
+  var mons=availableMonths();
   return'<div class="ccard fi"><h3>Analysis Complete</h3>'+
-    '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Transactions analyzed</span><span style="font-size:14px;font-weight:700">'+a.transactionCount+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Transactions imported</span><span style="font-size:14px;font-weight:700">'+a.transactionCount+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Income detected</span><span style="font-size:14px;font-weight:700;color:var(--green)">'+f(a.totalIncome)+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Expenses detected</span><span style="font-size:14px;font-weight:700;color:var(--red)">'+f(a.totalExpenses)+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--muted)">Categories found</span><span style="font-size:14px;font-weight:700">'+a.categoryBreakdown.length+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Categories found</span><span style="font-size:14px;font-weight:700">'+a.categoryBreakdown.length+'</span></div>'+
+    (mons.length>0?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Months covered</span><span style="font-size:14px;font-weight:700">'+mons.length+'</span></div>':'')+
+    (D.parseStats&&D.parseStats.openingBalance!=null?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Opening balance</span><span style="font-size:14px;font-weight:700;color:var(--green)">'+f(D.parseStats.openingBalance)+'</span></div>':'')+
+    (D.parseStats&&D.parseStats.closingBalance!=null?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Closing balance</span><span style="font-size:14px;font-weight:700;color:var(--green)">'+f(D.parseStats.closingBalance)+'</span></div>':'')+
+    (D.parseStats&&D.parseStats.summaryTotalsRowDetected?'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Totals summary row</span><span style="font-size:12px;color:var(--dim)">detected (excluded from transactions)</span></div>':'')+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:var(--muted)">Categorisation status</span><span style="font-size:12px"><span style="color:var(--green)">'+catConfirmed+' confirmed</span> &middot; <span style="color:var(--amber)">'+catPending+' pending</span>'+(catUncategorized>0?' &middot; <span style="color:var(--dim)">'+catUncategorized+' uncategorised</span>':'')+'</span></div>'+
   '</div>'+
   (needsReview>0?'<div class="uncat-banner fi" id="reviewBanner"><h3>'+needsReview+' transaction'+(needsReview!==1?'s':'')+' need'+(needsReview===1?'s':'')+' review</h3><p>Tap here to review and approve suggested categories</p></div>':'')+
   '<div style="text-align:center;padding:10px 0"><p style="font-size:12px;color:var(--dim)">Navigate to Dashboard, Breakdown, or Insights tabs to explore your analysis</p></div>';
@@ -744,7 +822,7 @@ function bindUpload(){
 
   var clearBtn=document.getElementById("clearData");
   if(clearBtn)clearBtn.addEventListener("click",function(){
-    D=null;render();toast("Analysis cleared");
+    D=null;selMonth=null;render();toast("Analysis cleared");
   });
 
   var reviewBanner=document.getElementById("reviewBanner");
@@ -793,6 +871,7 @@ async function doUpload(file){
     // Store parseStats for dashboard display
     data.parseStats=data.parseStats||null;
     D=data;
+    selMonth=null;
     buildAccounts();
     // Build and show import summary
     var summaryMsg=data.transactions.length+" transactions ready for review";
