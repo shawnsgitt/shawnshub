@@ -30,6 +30,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Ro
 .k.a{background:var(--abg);border-color:rgba(245,158,11,.15)}.k.a .v{color:var(--amber)}
 .k.b{background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.15)}.k.b .v{color:var(--blue)}
 .sec{margin-bottom:22px}
+.section-block{background:var(--card);border-radius:16px;padding:18px 16px;margin-bottom:18px;border:1px solid var(--border);position:relative}
+.section-block.detected{border-color:rgba(168,85,247,.25);background:linear-gradient(135deg,rgba(168,85,247,.04),var(--card))}
+.section-block.confirmed{border-color:rgba(6,182,212,.2);background:linear-gradient(135deg,rgba(6,182,212,.03),var(--card))}
+.section-block.manual{border-color:rgba(59,130,246,.2);background:linear-gradient(135deg,rgba(59,130,246,.03),var(--card))}
+.section-block-header{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.section-block-header .badge{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.section-block .summary-grid{margin-bottom:12px}
+.section-block .sec{margin-bottom:10px}
+.section-block .ccard{border:none;padding:0;margin-bottom:0;background:transparent}
 .stitle{font-size:13px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
 .ccard{background:var(--card);border-radius:14px;padding:16px;border:1px solid var(--border);margin-bottom:12px}
 .ccard h3{font-size:13px;color:var(--muted);margin-bottom:12px;font-weight:500}
@@ -2127,29 +2136,16 @@ function incomeView(){
   var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── Detected layer summary cards ───
+  // ─── SECTION 1: Detected from statements ───
   if(detected.length>0){
-    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
-    html+='<div class="summary-grid fi">';
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These income sources were found in your uploaded statements. Review and confirm to start tracking them.</div>';
+    html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Income Detected</div></div>';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Sources</div></div>';
     html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
     html+='</div>';
-  }
-
-  // ─── Confirmed layer summary cards ───
-  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
-  html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+confirmed.length+'</div><div class="ss-label">Confirmed Sources</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(confirmedMonthly*12)+'</div><div class="ss-label">Estimated Yearly Income</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(confirmedTotal)+'</div><div class="ss-label">All Confirmed Sources</div></div>';
-  html+='</div>';
-
-  // ─── Section A: Detected from statements ───
-  if(detected.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected from uploaded statements</div>';
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These income sources were found in your statements. Review and confirm to start tracking them.</div>';
     detected.forEach(function(it){
       var conf=it.confidence||"Medium";
       var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
@@ -2172,40 +2168,50 @@ function incomeView(){
       html+='<button class="btn-sm" data-notrelevant-income="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
       html+='</div></div>';
     });
+    // Dismissed items inside detected block
+    if(dismissed.length>0){
+      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
+      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm" data-restore-income="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Delete</button></div></div>';
+      });
+      html+='</div>';
+    }
     html+='</div>';
   }
 
-  // ─── Section B: Confirmed / tracked income ───
+  // ─── SECTION 2: Confirmed & Tracked ───
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedMonthly)+'</div><div class="ss-label">Monthly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+confirmed.length+'</div><div class="ss-label">Confirmed Sources</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(confirmedMonthly*12)+'</div><div class="ss-label">Estimated Yearly Income</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+f(confirmedTotal)+'</div><div class="ss-label">All Confirmed Sources</div></div>';
+  html+='</div>';
   if(confirmed.length>0){
-    html+='<div class="sec fi"><div class="stitle">Confirmed Income Sources</div>';
     confirmed.forEach(function(it){
       var typeColor=it.type==="Salary"?"var(--green)":it.type==="Passive Income"?"var(--purple)":"var(--blue)";
       html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.type||"Income")+' &middot; '+escHtml(it.frequency||"monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="font-size:18px;font-weight:700;color:'+typeColor+'">'+f(it.amount)+'</div></div>';
       html+='<div class="item-actions"><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Remove</button></div></div>';
     });
-    html+='</div>';
+  } else {
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed income sources yet. Confirm detected items above or add manually below.</div>';
   }
+  html+='</div>';
 
-  // ─── Section C: Add manually ───
-  html+='<div class="ccard fi"><h3>Add income source manually</h3>';
+  // ─── SECTION 3: Manual Entry ───
+  html+='<div class="section-block manual fi">';
+  html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Source Name</label><input class="form-input" id="incName" placeholder="e.g. Main job salary"></div>';
   html+='<div class="form-group"><label class="form-label">Type</label><select class="form-select" id="incType">';
   INCOME_TYPES.forEach(function(t){html+='<option value="'+t+'">'+t+'</option>'});
   html+='</select></div>';
   html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="incAmount" type="number" step="0.01" placeholder="0.00"></div>';
   html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="incFreq"><option value="Monthly">Monthly</option><option value="Weekly">Weekly</option><option value="Bi-Weekly">Bi-Weekly</option><option value="One-Off">One-Off</option><option value="Irregular">Irregular</option></select></div>';
-  html+='<button class="btn-primary" id="incAdd">Add Income Source</button></div>';
-
-  // ─── Dismissed items (collapsed) ───
-  if(dismissed.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
-    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not relevant.</div>';
-    dismissed.forEach(function(it){
-      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions"><button class="btn-sm" data-restore-income="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-income="'+it.id+'">Delete</button></div></div>';
-    });
-    html+='</div>';
-  }
+  html+='<button class="btn-primary" id="incAdd">Add Income Source</button>';
+  html+='</div>';
 
   return html;
 }
@@ -2392,29 +2398,16 @@ function subscriptionsView(){
   var totalActiveMonthly=activeConfirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── Detected layer summary cards ───
+  // ─── SECTION 1: Detected from statements ───
   if(detected.length>0){
-    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
-    html+='<div class="summary-grid fi">';
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring or likely subscription payments were found in your statements. Review and confirm to start tracking them.</div>';
+    html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Spend Detected</div></div>';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+detected.length+'</div><div class="ss-label">Potential Subscriptions</div></div>';
     html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Awaiting Review</div></div>';
     html+='</div>';
-  }
-
-  // ─── Confirmed layer summary cards ───
-  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
-  html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActiveMonthly)+'</div><div class="ss-label">Active Monthly Cost</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeConfirmed.length+'</div><div class="ss-label">Active Subscriptions</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActiveMonthly*12)+'</div><div class="ss-label">Estimated Yearly Cost</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+confirmed.length+'</div><div class="ss-label">Total Tracked</div></div>';
-  html+='</div>';
-
-  // ─── Section A: Detected from statements ───
-  if(detected.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected from uploaded statements</div>';
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These recurring or likely subscription payments were found in your statements. Review and confirm to start tracking them.</div>';
     detected.forEach(function(it){
       var conf=it.confidence||"Medium";
       var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
@@ -2437,31 +2430,51 @@ function subscriptionsView(){
       html+='<button class="btn-sm" data-notsub="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
       html+='</div></div>';
     });
+    // Dismissed items inside detected block
+    if(dismissed.length>0){
+      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
+      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm" data-restore-sub="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Delete</button></div></div>';
+      });
+      html+='</div>';
+    }
     html+='</div>';
   }
 
-  // ─── Section B: Confirmed / tracked ───
+  // ─── SECTION 2: Confirmed & Tracked ───
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(totalActiveMonthly)+'</div><div class="ss-label">Active Monthly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+activeConfirmed.length+'</div><div class="ss-label">Active Subscriptions</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.2)"><div class="ss-val" style="color:var(--amber)">'+f(totalActiveMonthly*12)+'</div><div class="ss-label">Estimated Yearly Cost</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+confirmed.length+'</div><div class="ss-label">Total Tracked</div></div>';
+  html+='</div>';
   if(activeConfirmed.length>0){
-    html+='<div class="sec fi"><div class="stitle">Active Subscriptions</div>';
+    html+='<div class="stitle">Active Subscriptions</div>';
     activeConfirmed.forEach(function(it){
       html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+(it.source==="upload"?' &middot; <span style="color:var(--purple)">From statement</span>':'')+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--cyan)">'+f(it.amount)+'</div><div class="status-pill paid">active</div></div></div>';
       html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Pause</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
     });
-    html+='</div>';
   }
-
   if(inactiveConfirmed.length>0){
-    html+='<div class="sec fi"><div class="stitle">Paused / Cancelled</div>';
+    html+='<div class="stitle">Paused / Cancelled</div>';
     inactiveConfirmed.forEach(function(it){
       var statusClass=it.status==="paused"?"pending":"overdue";
       html+='<div class="item-card"><div class="item-top"><div><div class="item-name">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.subCategory||it.frequency||"Monthly")+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:700;color:var(--dim)">'+f(it.amount)+'</div><div class="status-pill '+statusClass+'">'+it.status+'</div></div></div>';
       html+='<div class="item-actions"><button class="btn-sm btn-edit" data-toggle-sub="'+it.id+'">Reactivate</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Remove</button></div></div>';
     });
-    html+='</div>';
   }
+  if(confirmed.length===0){
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed subscriptions yet. Confirm detected items above or add manually below.</div>';
+  }
+  html+='</div>';
 
-  // ─── Section C: Add manually ───
-  html+='<div class="ccard fi"><h3>Add subscription manually</h3>';
+  // ─── SECTION 3: Manual Entry ───
+  html+='<div class="section-block manual fi">';
+  html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Service Name</label><input class="form-input" id="subName" placeholder="e.g. Netflix, Spotify, Adobe"></div>';
   html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="subAmt" type="number" step="0.01" placeholder="0.00"></div>';
   html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="subFreq"><option value="Monthly">Monthly</option><option value="Yearly">Yearly</option><option value="Weekly">Weekly</option><option value="Quarterly">Quarterly</option></select></div>';
@@ -2469,18 +2482,8 @@ function subscriptionsView(){
   html+='<div class="form-group"><label class="form-label">Billing Date (day of month)</label><input class="form-input" id="subBillDate" type="number" min="1" max="31" placeholder="1-31"></div>';
   html+='<div class="form-group"><label class="form-label">Renewal Date</label><input class="form-input" id="subRenewal" type="date"></div>';
   html+='<div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="subNotes" placeholder="Any notes about this subscription"></div>';
-  html+='<button class="btn-primary" id="subAdd">Add Subscription</button></div>';
-
-  // ─── Dismissed items (collapsed) ───
-  if(dismissed.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
-    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a subscription.</div>';
-    dismissed.forEach(function(it){
-      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_subscription"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions"><button class="btn-sm" data-restore-sub="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-sub="'+it.id+'">Delete</button></div></div>';
-    });
-    html+='</div>';
-  }
+  html+='<button class="btn-primary" id="subAdd">Add Subscription</button>';
+  html+='</div>';
 
   return html;
 }
@@ -2814,27 +2817,15 @@ function billsView(){
   });
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
-  // ─── Detected layer summary cards ───
+  // ─── SECTION 1: Detected from statements ───
   if(detected.length>0){
-    html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">Detected from statements</div>';
-    html+='<div class="summary-grid fi">';
+    html+='<div class="section-block detected fi">';
+    html+='<div class="section-block-header" style="color:var(--purple)"><span>&#128269;</span> Review Detected Items <span class="badge" style="background:rgba(168,85,247,.15);color:var(--purple)">'+detected.length+' pending</span></div>';
+    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">These recurring bill-like payments were found in your statements. Review and confirm to start tracking due dates and totals.</div>';
+    html+='<div class="summary-grid">';
     html+='<div class="summary-stat" style="border-color:rgba(168,85,247,.25)"><div class="ss-val" style="color:var(--purple)">'+f(detectedTotal)+'</div><div class="ss-label">Potential Bills Detected</div></div>';
     html+='<div class="summary-stat" style="border-color:rgba(245,158,11,.25)"><div class="ss-val" style="color:var(--amber)">'+detected.length+'</div><div class="ss-label">Bills Awaiting Review</div></div>';
     html+='</div>';
-  }
-
-  // ─── Confirmed layer summary cards ───
-  html+='<div style="margin-bottom:6px;font-size:12px;font-weight:600;color:var(--cyan);text-transform:uppercase;letter-spacing:.5px">Confirmed &amp; tracked</div>';
-  html+='<div class="summary-grid fi">';
-  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedTotal)+'</div><div class="ss-label">Confirmed Monthly Bills</div></div>';
-  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+upcoming.length+'</div><div class="ss-label">Upcoming Due</div></div>';
-  html+='<div class="summary-stat" style="border-color:'+(overdue>0?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)")+'"><div class="ss-val" style="color:'+(overdue>0?"var(--red)":"var(--green)")+'">'+(overdue>0?overdue+" overdue":"All good")+'</div><div class="ss-label">Status</div></div>';
-  html+='</div>';
-
-  // ─── Section A: Detected bills from statements ───
-  if(detected.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--purple)">Detected bills from uploaded statements</div>';
-    html+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">These recurring bill-like payments were found in your statements. Review and confirm to start tracking due dates and totals.</div>';
     detected.forEach(function(it){
       var conf=it.confidence||"Medium";
       var confColor=conf==="High"?"var(--green)":conf==="Medium"?"var(--amber)":"var(--dim)";
@@ -2857,59 +2848,67 @@ function billsView(){
       html+='<button class="btn-sm" data-notbill="'+it.id+'" style="color:var(--dim);font-size:10px">Not relevant</button>';
       html+='</div></div>';
     });
+    // Dismissed items inside detected block
+    if(dismissed.length>0){
+      html+='<div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(168,85,247,.12)">';
+      html+='<div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Dismissed ('+dismissed.length+')</div>';
+      dismissed.forEach(function(it){
+        html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
+        html+='<div class="item-actions"><button class="btn-sm" data-restore-bill="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Delete</button></div></div>';
+      });
+      html+='</div>';
+    }
     html+='</div>';
   }
 
-  // ─── Section B: Confirmed / tracked bills ───
+  // ─── SECTION 2: Confirmed & Tracked ───
+  html+='<div class="section-block confirmed fi">';
+  html+='<div class="section-block-header" style="color:var(--cyan)"><span>&#9989;</span> Confirmed &amp; Tracked</div>';
+  html+='<div class="summary-grid">';
+  html+='<div class="summary-stat" style="border-color:rgba(6,182,212,.2)"><div class="ss-val" style="color:var(--cyan)">'+f(confirmedTotal)+'</div><div class="ss-label">Confirmed Monthly Bills</div></div>';
+  html+='<div class="summary-stat" style="border-color:rgba(34,197,94,.2)"><div class="ss-val" style="color:var(--green)">'+upcoming.length+'</div><div class="ss-label">Upcoming Due</div></div>';
+  html+='<div class="summary-stat" style="border-color:'+(overdue>0?"rgba(239,68,68,.2)":"rgba(34,197,94,.2)")+'"><div class="ss-val" style="color:'+(overdue>0?"var(--red)":"var(--green)")+'">'+(overdue>0?overdue+" overdue":"All good")+'</div><div class="ss-label">Status</div></div>';
+  html+='</div>';
+
   // Show overdue first
   var overdueItems=confirmed.filter(function(i){return getBillStatus(i)==="overdue"});
   var upcomingItems=confirmed.filter(function(i){return getBillStatus(i)==="pending"});
   var paidItems=confirmed.filter(function(i){return getBillStatus(i)==="paid"});
 
   if(overdueItems.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--red)">Overdue Bills</div>';
+    html+='<div class="stitle" style="color:var(--red)">Overdue Bills</div>';
     overdueItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
       html+=renderBillCard(it);
     });
-    html+='</div>';
   }
-
   if(upcomingItems.length>0){
-    html+='<div class="sec fi"><div class="stitle">Upcoming Confirmed Bills</div>';
+    html+='<div class="stitle">Upcoming Confirmed Bills</div>';
     upcomingItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
       html+=renderBillCard(it);
     });
-    html+='</div>';
   }
-
   if(paidItems.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--green)">Paid This Month</div>';
+    html+='<div class="stitle" style="color:var(--green)">Paid This Month</div>';
     paidItems.sort(function(a,b){return(parseInt(a.dueDate)||0)-(parseInt(b.dueDate)||0)}).forEach(function(it){
       html+=renderBillCard(it);
     });
-    html+='</div>';
   }
+  if(confirmed.length===0){
+    html+='<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No confirmed bills yet. Confirm detected items above or add manually below.</div>';
+  }
+  html+='</div>';
 
-  // ─── Section C: Add manually ───
-  html+='<div class="ccard fi"><h3>Add bill manually</h3>';
+  // ─── SECTION 3: Manual Entry ───
+  html+='<div class="section-block manual fi">';
+  html+='<div class="section-block-header" style="color:var(--blue)"><span>&#9997;&#65039;</span> Manual Entry</div>';
   html+='<div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="billName" placeholder="e.g. Rent, Electricity, Council Tax"></div>';
   html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="billAmt" type="number" step="0.01" placeholder="0.00"></div>';
   html+='<div class="form-group"><label class="form-label">Due Date (day of month)</label><input class="form-input" id="billDue" type="number" min="1" max="31" placeholder="1-31"></div>';
   html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="billFreq"><option value="Monthly">Monthly</option><option value="Quarterly">Quarterly</option><option value="Yearly">Yearly</option><option value="Weekly">Weekly</option></select></div>';
   html+='<div class="form-group"><label class="form-label">Payment Method</label><select class="form-select" id="billMethod"><option value="Auto-pay (Direct Debit)">Auto-pay (Direct Debit)</option><option value="Manual">Manual</option><option value="Standing Order">Standing Order</option></select></div>';
   html+='<div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="billNotes" placeholder="Any notes about this bill"></div>';
-  html+='<button class="btn-primary" id="billAdd">Add Bill</button></div>';
-
-  // ─── Dismissed items (collapsed) ───
-  if(dismissed.length>0){
-    html+='<div class="sec fi"><div class="stitle" style="color:var(--dim)">Dismissed ('+dismissed.length+')</div>';
-    html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Items you dismissed or marked as not a bill.</div>';
-    dismissed.forEach(function(it){
-      html+='<div class="item-card" style="opacity:.6"><div class="item-top"><div><div class="item-name" style="text-decoration:line-through">'+escHtml(it.name)+'</div><div class="item-detail">'+escHtml(it.detectionStatus==="not_bill"||it.detectionStatus==="not_relevant"?"Marked as not relevant":"Dismissed")+'</div></div><div style="text-align:right"><div style="font-size:14px;color:var(--dim)">'+f(it.amount)+'</div></div></div>';
-      html+='<div class="item-actions"><button class="btn-sm" data-restore-bill="'+it.id+'" style="color:var(--blue)">Restore</button><button class="btn-sm btn-danger" data-del-bill="'+it.id+'">Delete</button></div></div>';
-    });
-    html+='</div>';
-  }
+  html+='<button class="btn-primary" id="billAdd">Add Bill</button>';
+  html+='</div>';
 
   return html;
 }
