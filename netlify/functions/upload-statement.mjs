@@ -97,19 +97,44 @@ function detectBalanceRowType(description, typeValue) {
 }
 
 // Category keywords for auto-categorization — extensive list for maximum auto-match
+// ───────── WORD-BOUNDARY KEYWORD MATCHING ─────────
+// Short keywords (<=4 chars) are matched with word boundaries to prevent
+// false positives (e.g., "tfl" inside "netflix", "bp" inside "subscription").
+// Keywords ending with a space are matched as-is (the space acts as a boundary).
+const _kwRegexCache = new Map();
+function keywordMatches(lower, keyword) {
+  if (keyword.endsWith(" ")) {
+    return lower.includes(keyword);
+  }
+  if (keyword.length <= 4) {
+    let re = _kwRegexCache.get(keyword);
+    if (!re) {
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      re = new RegExp("(?:^|\\b|\\s)" + escaped + "(?:$|\\b|\\s)");
+      _kwRegexCache.set(keyword, re);
+    }
+    return re.test(lower);
+  }
+  return lower.includes(keyword);
+}
+
+// Category rules — ORDER MATTERS: more-specific categories (Subscriptions,
+// Income, Cash Transfer) are checked before broader ones (Transport, Shopping)
+// so that "netflix" matches Subscriptions before "tfl" matches Transport, and
+// "amazon prime" matches Subscriptions before "amazon" matches Shopping.
 const CATEGORY_RULES = [
   { category: "Groceries", keywords: ["tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose", "co-op", "coop", "ocado", "m&s food", "marks & spencer food", "iceland", "spar", "costco", "grocery", "supermarket", "farm foods", "whole foods", "wholefoods", "shoprite", "pick n pay", "checkers", "woolworths food", "food lover", "fruit & veg", "butcher", "bakery", "market", "fresh", "farmfoods", "heron foods", "jack's", "booths", "nisa"] },
   { category: "Eating Out", keywords: ["mcdonald", "burger king", "kfc", "nando", "pizza", "domino", "uber eats", "deliveroo", "just eat", "starbucks", "costa", "greggs", "pret", "subway", "restaurant", "cafe", "coffee", "takeaway", "wetherspoon", "wagamama", "five guys", "zizzi", "gourmet", "eat ", "dine", "dining", "food delivery", "grubhub", "doordash", "postmates", "chipotle", "taco bell", "wendy", "chick-fil-a", "popeyes", "panera", "dunkin", "tim horton", "sushi", "ramen", "kebab", "chicken", "grill", "steers", "wimpy", "debonairs", "roman's", "fishaways", "ocean basket", "spur", "mugg & bean", "vida e", "seattle coffee", "nero"] },
-  { category: "Transport", keywords: ["tfl", "transport for london", "uber trip", "bolt", "lyft", "bus", "train", "rail", "fuel", "petrol", "diesel", "shell", "bp", "esso", "texaco", "parking", "congestion", "dart charge", "taxi", "national rail", "oyster", "go-ahead", "engen", "caltex", "sasol", "total garage", "garage", "tollgate", "toll", "e-toll", "etoll", "gautrain", "metrorail", "rea vaya", "myciti", "golden arrow", "car wash", "car service", "tyres", "motor", "vehicle", "aa ", "rac ", "mot test", "breakdown"] },
-  { category: "Shopping", keywords: ["amazon", "ebay", "asos", "zara", "h&m", "primark", "next", "argos", "john lewis", "currys", "ikea", "tk maxx", "sports direct", "nike", "adidas", "new look", "river island", "shein", "boohoo", "apple store", "google store", "takealot", "mr price", "jet ", "edgars", "game ", "incredible connect", "makro", "builders", "clothing", "fashion", "shoes", "retail", "store", "shop", "mall", "outlet", "pep ", "ackermans", "truworths", "cotton on", "superdry", "uniqlo", "gap ", "mango", "forever 21", "pull & bear", "bershka", "massimo dutti", "matalan", "george ", "tu clothing", "decathlon"] },
+  { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
+  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer", "transfer to", "send money", "remittance"] },
   { category: "Subscriptions", keywords: ["netflix", "spotify", "disney", "youtube premium", "apple music", "amazon prime", "hulu", "now tv", "sky ", "virgin media", "bt broadband", "audible", "adobe", "microsoft 365", "icloud", "google one", "playstation plus", "ps plus", "xbox game pass", "crunchyroll", "patreon", "chatgpt", "openai", "dstv", "showmax", "multichoice", "monthly sub", "subscription", "membership", "renewal", "recurring", "annual fee", "apple tv", "hbo", "paramount", "peacock", "deezer", "tidal", "canva", "notion", "dropbox", "github", "linkedin premium", "twitch"] },
   { category: "Bills & Utilities", keywords: ["electric", "gas ", "water", "council tax", "tv licence", "broadband", "internet", "phone bill", "mobile", "ee ", "vodafone", "three ", "o2 ", "giffgaff", "insurance", "rent ", "mortgage", "british gas", "edf", "eon", "octopus energy", "thames water", "scottish power", "bulb", "eskom", "city power", "city of johannesburg", "city of cape town", "rates", "levy", "body corporate", "municipal", "telkom", "mtn ", "cell c", "vodacom", "fibre", "wifi", "rain ", "afrihost", "webafrica", "nbn", "comcast", "at&t", "verizon", "spectrum", "strata", "property management", "maintenance fee", "service charge"] },
+  { category: "Transport", keywords: ["tfl", "transport for london", "uber trip", "bolt", "lyft", "bus", "train", "rail", "fuel", "petrol", "diesel", "shell", "bp", "esso", "texaco", "parking", "congestion", "dart charge", "taxi", "national rail", "oyster", "go-ahead", "engen", "caltex", "sasol", "total garage", "garage", "tollgate", "toll", "e-toll", "etoll", "gautrain", "metrorail", "rea vaya", "myciti", "golden arrow", "car wash", "car service", "tyres", "motor", "vehicle", "aa ", "rac ", "mot test", "breakdown"] },
+  { category: "Shopping", keywords: ["amazon", "ebay", "asos", "zara", "h&m", "primark", "next", "argos", "john lewis", "currys", "ikea", "tk maxx", "sports direct", "nike", "adidas", "new look", "river island", "shein", "boohoo", "apple store", "google store", "takealot", "mr price", "jet ", "edgars", "game ", "incredible connect", "makro", "builders", "clothing", "fashion", "shoes", "retail", "store", "shop", "mall", "outlet", "pep ", "ackermans", "truworths", "cotton on", "superdry", "uniqlo", "gap ", "mango", "forever 21", "pull & bear", "bershka", "massimo dutti", "matalan", "george ", "tu clothing", "decathlon"] },
   { category: "Health & Fitness", keywords: ["gym", "puregym", "the gym", "david lloyd", "fitness first", "pharmacy", "boots", "superdrug", "doctor", "dentist", "hospital", "health", "vitamin", "myprotein", "holland & barrett", "nuffield", "clicks", "dischem", "dis-chem", "planet fitness", "virgin active", "medical", "clinic", "optometrist", "optician", "physio", "therapist", "counsell", "psychology", "chiropract", "pathology", "lancet", "ampath", "discovery health", "medical aid", "bupa", "vitality", "wellness", "supplement", "protein"] },
   { category: "Entertainment", keywords: ["cinema", "odeon", "cineworld", "vue", "theatre", "concert", "ticket", "ticketmaster", "eventbrite", "gaming", "steam", "playstation store", "nintendo", "bowling", "museum", "zoo", "theme park", "ster-kinekor", "nu metro", "computicket", "webtickets", "festival", "event", "arcade", "laser", "escape room", "comedy", "show", "performance", "gallery", "aquarium", "funfair", "amusement"] },
   { category: "Education", keywords: ["udemy", "coursera", "skillshare", "book", "waterstones", "wh smith", "tuition", "school", "university", "student", "course", "college", "academy", "training", "workshop", "seminar", "exam", "certification", "study", "learning", "lecture", "textbook", "stationery", "cna ", "exclusive books", "loot.co", "kindle", "amazon book"] },
   { category: "Personal Care", keywords: ["barber", "hairdresser", "salon", "spa", "beauty", "nail", "lush", "the body shop", "perfume", "cosmetic", "makeup", "skincare", "grooming", "massage", "facial", "wax", "sorbet", "rain salon", "reed & barton", "dermatolog", "aesthetic"] },
-  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer", "transfer to", "send money", "remittance"] },
-  { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
   { category: "Savings", keywords: ["savings", "save", "investment", "isa", "premium bond", "vanguard", "trading 212", "freetrade", "nutmeg", "moneybox", "unit trust", "money market", "fixed deposit", "notice deposit", "capitec save", "fnb save", "easy equities", "etf", "satrix", "sygnia", "allan gray", "coronation", "stanlib"] },
   { category: "Cash Withdrawal", keywords: ["atm", "cash withdrawal", "withdraw", "cash send", "cardless"] },
   { category: "Cash In", keywords: ["cash deposit", "cash in", "cash payment in", "cash credit", "cash received", "counter deposit", "counter credit", "branch deposit", "cash at branch", "cash lodgement", "lodgement"] },
@@ -164,23 +189,23 @@ function categorizeWithConfidence(description, learnedMappings) {
   }
 
   // Check keyword rules (high confidence)
-  const keywordMatches = [];
+  const kwMatches = [];
   for (const rule of CATEGORY_RULES) {
-    for (const keyword of rule.keywords) {
-      if (lower.includes(keyword)) {
-        keywordMatches.push({ category: rule.category, keyword });
+    for (const kw of rule.keywords) {
+      if (keywordMatches(lower, kw)) {
+        kwMatches.push({ category: rule.category, keyword: kw });
       }
     }
   }
-  if (keywordMatches.length > 0) {
-    const primary = keywordMatches[0];
+  if (kwMatches.length > 0) {
+    const primary = kwMatches[0];
     let conf = ambiguous ? 0.65 : 0.82;
     // If multiple keyword rules match the same category, boost confidence
-    const sameCat = keywordMatches.filter(m => m.category === primary.category);
+    const sameCat = kwMatches.filter(m => m.category === primary.category);
     if (sameCat.length > 1) conf = Math.min(0.92, conf + 0.05);
     // Collect unique alternatives
     const altSet = new Set();
-    keywordMatches.forEach(m => { if (m.category !== primary.category) altSet.add(m.category); });
+    kwMatches.forEach(m => { if (m.category !== primary.category) altSet.add(m.category); });
     if (altSet.size > 0) conf = Math.max(0.55, conf - 0.08);
     return {
       category: primary.category,
