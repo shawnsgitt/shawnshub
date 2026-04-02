@@ -2123,7 +2123,7 @@ function incomeView(){
   var confirmed=items.filter(function(i){return !i.detectionStatus||i.detectionStatus==="confirmed"||i.detectionStatus==="edited_confirmed"});
   var dismissed=items.filter(function(i){return i.detectionStatus==="dismissed"||i.detectionStatus==="not_relevant"});
 
-  var confirmedMonthly=confirmed.filter(function(i){return(i.frequency||"monthly")==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
+  var confirmedMonthly=confirmed.filter(function(i){return(i.frequency||"monthly").toLowerCase()==="monthly"}).reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var confirmedTotal=confirmed.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
   var detectedTotal=detected.reduce(function(s,i){return s+parseFloat(i.amount||0)},0);
 
@@ -2193,7 +2193,7 @@ function incomeView(){
   INCOME_TYPES.forEach(function(t){html+='<option value="'+t+'">'+t+'</option>'});
   html+='</select></div>';
   html+='<div class="form-group"><label class="form-label">Amount (£)</label><input class="form-input" id="incAmount" type="number" step="0.01" placeholder="0.00"></div>';
-  html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="incFreq"><option value="monthly">Monthly</option><option value="weekly">Weekly</option><option value="bi-weekly">Bi-Weekly</option><option value="one-off">One-Off</option><option value="irregular">Irregular</option></select></div>';
+  html+='<div class="form-group"><label class="form-label">Frequency</label><select class="form-select" id="incFreq"><option value="Monthly">Monthly</option><option value="Weekly">Weekly</option><option value="Bi-Weekly">Bi-Weekly</option><option value="One-Off">One-Off</option><option value="Irregular">Irregular</option></select></div>';
   html+='<button class="btn-primary" id="incAdd">Add Income Source</button></div>';
 
   // ─── Dismissed items (collapsed) ───
@@ -3379,7 +3379,7 @@ async function syncTransactionsToHub(){
       if(ig.name.toLowerCase().match(/refund|cashback|reversal/))incType="Irregular Income";
       if(ig.name.toLowerCase().match(/interest|dividend/))incType="Passive Income";
       var incFreq=inferFrequency(ig.dates);
-      if(ig.count<2)incFreq="one-off";
+      if(ig.count<2)incFreq="One-Off";
       var incLastDate=dateToISO(ig.lastDate);
       var existingInc=existingIncMap[ik];
       if(!existingInc){
