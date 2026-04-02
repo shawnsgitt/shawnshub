@@ -239,7 +239,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
 var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
-function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
+function f(n){if(n==null||isNaN(n))return"£0";return"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
 
 var D=null,charts={},cv="home",selAcct="all";
@@ -288,13 +288,13 @@ function accounts(){
 
 function filtered(){
   if(!D||!D.transactions)return[];
-  if(selAcct==="all")return D.transactions;
-  return D.accounts[selAcct]||[];
+  var base=selAcct==="all"?D.transactions:(D.accounts[selAcct]||[]);
+  return base.filter(function(t){return !t.account||t.account.toLowerCase().indexOf("remittance")===-1});
 }
 
 function acctSelector(){
   if(!hasData())return"";
-  var accts=accounts();
+  var accts=accounts().filter(function(a){return a.toLowerCase().indexOf("remittance")===-1});
   if(accts.length<=1)return"";
   var html='<div class="acct-sel fi">';
   html+='<div class="acct-pill'+(selAcct==="all"?" on":"")+'" data-acct="all">All Accounts</div>';
@@ -356,11 +356,12 @@ function isDebtAccount(name){
 
 function latestMonth(){
   var all=filtered();
-  if(!all.length)return null;
+  if(!all.length){var now=new Date();return{y:now.getFullYear(),m:now.getMonth()+1};}
   var dates=all.map(function(t){
     var p=t.date.split("/");
     return{y:parseInt(p[2],10),m:parseInt(p[1],10)};
-  });
+  }).filter(function(d){return !isNaN(d.y)&&!isNaN(d.m)});
+  if(!dates.length){var now2=new Date();return{y:now2.getFullYear(),m:now2.getMonth()+1};}
   dates.sort(function(a,b){return b.y-a.y||b.m-a.m});
   return dates[0];
 }
@@ -397,20 +398,34 @@ function homeView(){
     }
   });
   var netWorth=cashTotal-debtTotal;
+  var nwHint="";
+  if(netWorth===0&&cashTotal===0&&debtTotal===0&&D.transactions.length>0){
+    nwHint='<div class="nw-sub" style="margin-top:4px;font-size:11px">No balance data in uploaded statements</div>';
+  }
 
   var mt=monthlyTxns();
   var mIncome=0,mSpending=0;
+  var mPending=0,mNonTxn=0;
   mt.forEach(function(t){
     var effectiveType=t.type;
     if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
-    if(effectiveType==="Non-Transactional") return;
+    if(t.category==="Pending Review"&&!t.suggestedType)mPending++;
+    if(effectiveType==="Non-Transactional"){mNonTxn++;return;}
     if(effectiveType==="Income")mIncome+=txAmt(t);
     else if(effectiveType==="Expense")mSpending+=txAmt(t);
   });
   var leftAfter=mIncome-mSpending;
+  var zeroHint="";
+  if(mt.length>0&&mIncome===0&&mSpending===0){
+    if(mPending>0)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">'+mPending+' transaction'+(mPending!==1?'s':'')+' still pending review &mdash; totals will update once categorised</div>';
+    else if(mNonTxn===mt.length)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">All '+mt.length+' transactions this month are non-transactional (e.g. balance carried forward)</div>';
+    else zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">Transactions found but none categorised as income or expense yet</div>';
+  } else if(mt.length===0){
+    zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">No data for this month</div>';
+  }
 
   var lm=latestMonth();
-  var monthLabel=lm?monthName(lm.m)+" "+lm.y:"This month";
+  var monthLabel=(lm&&monthName(lm.m)&&!isNaN(lm.y))?monthName(lm.m)+" "+lm.y:"This month";
 
   return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
   acctSelector()+
@@ -419,6 +434,7 @@ function homeView(){
     '<div class="nw-label">Net Worth</div>'+
     '<div class="nw-val" style="color:'+(netWorth>=0?"var(--green)":"var(--red)")+'">'+(netWorth<0?"-":"")+f(Math.abs(netWorth))+'</div>'+
     '<div class="nw-sub">Cash minus debt</div>'+
+    nwHint+
   '</div>'+
 
   '<div class="snap-row fi" style="animation-delay:.05s">'+
@@ -433,9 +449,10 @@ function homeView(){
     '<div class="snap-card green"><div class="sc-label">Income</div><div class="sc-val">'+f(mIncome)+'</div></div>'+
     '<div class="snap-card red"><div class="sc-label">Spending</div><div class="sc-val">'+f(mSpending)+'</div></div>'+
   '</div>'+
+  zeroHint+
 
   '<div class="snap-row fi" style="animation-delay:.15s">'+
-    '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
+    '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0&&!isNaN(leftAfter)?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
   '</div>'+
 
   // ── Monthly category breakdown ──
@@ -445,8 +462,8 @@ function homeView(){
   recentTransactionsHtml(mt)+
 
   '<div class="snap-divider fi" style="animation-delay:.55s"></div>'+
-  '<div class="sec fi" style="animation-delay:.58s"><div class="stitle">Accounts</div>'+
-  accts.map(function(a){
+  '<div class="sec fi" style="animation-delay:.58s"><div class="stitle">Data Sources</div>'+
+  accts.filter(function(a){return a.toLowerCase().indexOf("remittance")===-1}).map(function(a){
     var bal=latestBalance(a);
     var isDebt=isDebtAccount(a);
     var txnCount=D.accounts[a].length;
@@ -1143,7 +1160,7 @@ function bindBatchEvents(bg){
 function recalcAnalysis(){
   if(!D||!D.transactions)return;
   buildAccounts();
-  var txns=D.transactions;
+  var txns=D.transactions.filter(function(t){return !t.account||t.account.toLowerCase().indexOf("remittance")===-1});
   var totalIncome=0,totalExpenses=0,totalSavings=0;
   txns.forEach(function(t){
     // Use suggested type/category for analysis if still pending review
