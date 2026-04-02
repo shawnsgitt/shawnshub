@@ -357,7 +357,7 @@ function isDebtAccount(name){
 function latestMonth(){
   var all=filtered();
   if(!all.length){var now=new Date();return{y:now.getFullYear(),m:now.getMonth()+1};}
-  var dates=all.map(function(t){
+  var dates=all.filter(function(t){return !t.dateUnreadable&&t.date!=="UNREADABLE"}).map(function(t){
     var p=t.date.split("/");
     return{y:parseInt(p[2],10),m:parseInt(p[1],10)};
   }).filter(function(d){return !isNaN(d.y)&&!isNaN(d.m)});
@@ -370,6 +370,7 @@ function monthlyTxns(){
   var lm=latestMonth();
   if(!lm)return[];
   return filtered().filter(function(t){
+    if(t.dateUnreadable||t.date==="UNREADABLE")return false;
     var p=t.date.split("/");
     return parseInt(p[1],10)===lm.m&&parseInt(p[2],10)===lm.y;
   });
@@ -398,30 +399,51 @@ function homeView(){
     }
   });
   var netWorth=cashTotal-debtTotal;
+  var hasBalanceData=!(netWorth===0&&cashTotal===0&&debtTotal===0&&D.transactions.length>0);
   var nwHint="";
-  if(netWorth===0&&cashTotal===0&&debtTotal===0&&D.transactions.length>0){
-    nwHint='<div class="nw-sub" style="margin-top:4px;font-size:11px">No balance data in uploaded statements</div>';
+  if(!hasBalanceData){
+    nwHint='<div class="nw-sub" style="margin-top:4px;font-size:11px;color:var(--amber)">Your uploaded statements did not include balance columns &mdash; upload a statement with balances to calculate net worth</div>';
   }
 
   var mt=monthlyTxns();
   var mIncome=0,mSpending=0;
-  var mPending=0,mNonTxn=0;
+  var mPending=0,mNonTxn=0,mConfirmed=0;
   mt.forEach(function(t){
     var effectiveType=t.type;
     if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
     if(t.category==="Pending Review"&&!t.suggestedType)mPending++;
+    if(t.confirmed)mConfirmed++;
     if(effectiveType==="Non-Transactional"){mNonTxn++;return;}
     if(effectiveType==="Income")mIncome+=txAmt(t);
     else if(effectiveType==="Expense")mSpending+=txAmt(t);
   });
   var leftAfter=mIncome-mSpending;
+  var totalPending=pendingReview().length;
+  var totalConfirmed=D.transactions.filter(function(t){return t.confirmed===true}).length;
+  var unreadableDateCount=D.transactions.filter(function(t){return t.dateUnreadable||t.date==="UNREADABLE"}).length;
   var zeroHint="";
   if(mt.length>0&&mIncome===0&&mSpending===0){
-    if(mPending>0)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">'+mPending+' transaction'+(mPending!==1?'s':'')+' still pending review &mdash; totals will update once categorised</div>';
-    else if(mNonTxn===mt.length)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">All '+mt.length+' transactions this month are non-transactional (e.g. balance carried forward)</div>';
-    else zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">Transactions found but none categorised as income or expense yet</div>';
+    if(mPending>0)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--amber);padding:0 20px;text-align:center">'+mPending+' transaction'+(mPending!==1?'s':'')+' still pending review &mdash; review and confirm categories so totals can be calculated</div>';
+    else if(mNonTxn===mt.length)zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">All '+mt.length+' transaction'+(mt.length!==1?'s':'')+' this month are non-transactional (e.g. balance carried forward) &mdash; only income and expense transactions count toward totals</div>';
+    else zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">Transactions found but none categorised as income or expense yet &mdash; assign categories to see monthly totals</div>';
   } else if(mt.length===0){
-    zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--dim);padding:0 20px;text-align:center">No data for this month</div>';
+    var allTxns=filtered().filter(function(t){return !t.dateUnreadable&&t.date!=="UNREADABLE"});
+    var dateRange="";
+    if(allTxns.length>0){
+      var allDates=allTxns.map(function(t){var p=t.date.split("/");return{d:parseInt(p[0],10),m:parseInt(p[1],10),y:parseInt(p[2],10)};}).filter(function(d){return !isNaN(d.y)});
+      if(allDates.length>0){
+        allDates.sort(function(a,b){return a.y-b.y||a.m-b.m||a.d-b.d;});
+        var earliest=allDates[0];
+        var latest=allDates[allDates.length-1];
+        dateRange=" Your "+allTxns.length+" transaction"+(allTxns.length!==1?"s":"")+" are from "+monthName(earliest.m)+" "+earliest.y+(earliest.m!==latest.m||earliest.y!==latest.y?" to "+monthName(latest.m)+" "+latest.y:"")+".";
+      }
+    }
+    var unreadableNote=unreadableDateCount>0?" "+unreadableDateCount+" row"+(unreadableDateCount!==1?"s":"")+" had unreadable dates and were excluded.":"";
+    zeroHint='<div class="snap-hint fi" style="animation-delay:.13s;font-size:12px;color:var(--amber);padding:0 20px;text-align:center">No transactions found for this month.'+dateRange+unreadableNote+' Try switching to the Overview tab to see all-time data.</div>';
+  }
+  // Add date parsing failure warning if applicable
+  if(unreadableDateCount>0){
+    zeroHint+='<div class="snap-hint fi" style="animation-delay:.14s;font-size:12px;color:var(--red);padding:4px 20px;text-align:center">Date parsing failed for '+unreadableDateCount+' row'+(unreadableDateCount!==1?'s':'')+' &mdash; these transactions are excluded from monthly totals. Check the Import Summary above for details.</div>';
   }
 
   var lm=latestMonth();
@@ -429,18 +451,69 @@ function homeView(){
 
   return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
   acctSelector()+
+  // ── Import summary card (shows date parsing stats) ──
+  (function(){
+    if(!D||!D.parseStats)return'';
+    var ps=D.parseStats;
+    var lines=[];
+    lines.push('<strong>Transactions imported:</strong> '+D.transactions.length);
+    lines.push('<strong>Valid dates read:</strong> '+ps.validDates);
+    if(ps.failedDates>0)lines.push('<strong>Failed date rows:</strong> <span style="color:var(--red)">'+ps.failedDates+'</span>');
+    if(ps.dateRangeMin&&ps.dateRangeMax){
+      var minParts=ps.dateRangeMin.split("-");
+      var maxParts=ps.dateRangeMax.split("-");
+      var minLabel=minParts[2]+"/"+minParts[1]+"/"+minParts[0];
+      var maxLabel=maxParts[2]+"/"+maxParts[1]+"/"+maxParts[0];
+      lines.push('<strong>Date range found:</strong> '+minLabel+' to '+maxLabel);
+    }
+    var lmNow=latestMonth();
+    if(lmNow)lines.push('<strong>Current month selected:</strong> '+monthName(lmNow.m)+' '+lmNow.y);
+    // Count matching txns for current month
+    var mCount=monthlyTxns().length;
+    lines.push('<strong>Matching transactions this month:</strong> '+(mCount>0?'<span style="color:var(--green)">'+mCount+'</span>':'<span style="color:var(--amber)">0</span>'));
+    // Date column info
+    if(ps.dateColumnsUsed&&ps.dateColumnsUsed.length>0){
+      var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+c.column+'" ('+c.type+') in '+c.sheet}).join(', ');
+      lines.push('<strong>Date column used:</strong> '+colInfo);
+      if(ps.dateColumnsUsed[0].allColumns&&ps.dateColumnsUsed[0].allColumns.length>1){
+        lines.push('<strong>Other date columns found:</strong> '+ps.dateColumnsUsed[0].allColumns.slice(1).join(', '));
+      }
+    }
+    if(ps.dateOrder)lines.push('<strong>Date format detected:</strong> '+(ps.dateOrder==="day-first"?"Day-first (DD/MM/YYYY)":"Month-first (MM/DD/YYYY)"));
+    // Failed rows detail
+    if(ps.failedDates>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
+      var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+r.rawValue+'"'+(r.sheet?' ('+r.sheet+')':'')}).join(', ');
+      lines.push('<strong>Unreadable date examples:</strong> '+examples);
+    }
+    return'<div class="fi" style="animation-delay:.02s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;font-size:12px;line-height:1.8">'+
+      '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Import Summary</div>'+
+      lines.join('<br>')+
+    '</div>';
+  })()+
   (pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
   '<div class="snap-hero fi">'+
     '<div class="nw-label">Net Worth</div>'+
+    (hasBalanceData?
     '<div class="nw-val" style="color:'+(netWorth>=0?"var(--green)":"var(--red)")+'">'+(netWorth<0?"-":"")+f(Math.abs(netWorth))+'</div>'+
-    '<div class="nw-sub">Cash minus debt</div>'+
+    '<div class="nw-sub">Cash minus debt</div>'
+    :
+    '<div class="nw-val" style="color:var(--dim);font-size:28px">&mdash;</div>'+
+    '<div class="nw-sub">Not enough data to calculate</div>'
+    )+
     nwHint+
   '</div>'+
 
+  (hasBalanceData?
   '<div class="snap-row fi" style="animation-delay:.05s">'+
     '<div class="snap-card green"><div class="sc-label">Cash on hand</div><div class="sc-val">'+f(cashTotal)+'</div><div class="sc-sub">Across '+accts.filter(function(a){return !isDebtAccount(a)}).length+' account'+(accts.filter(function(a){return !isDebtAccount(a)}).length!==1?'s':'')+'</div></div>'+
     '<div class="snap-card red"><div class="sc-label">Total debt</div><div class="sc-val">'+f(debtTotal)+'</div><div class="sc-sub">'+(debtTotal>0?accts.filter(isDebtAccount).length+' account'+(accts.filter(isDebtAccount).length!==1?'s':''):'No debt accounts')+'</div></div>'+
-  '</div>'+
+  '</div>'
+  :
+  '<div class="snap-row fi" style="animation-delay:.05s">'+
+    '<div class="snap-card" style="border-color:var(--border)"><div class="sc-label">Uploaded sources</div><div class="sc-val" style="color:var(--text)">'+accts.filter(function(a){return a.toLowerCase().indexOf("remittance")===-1}).length+'</div><div class="sc-sub">account'+(accts.filter(function(a){return a.toLowerCase().indexOf("remittance")===-1}).length!==1?'s':'')+' &middot; no balance data</div></div>'+
+    '<div class="snap-card" style="border-color:var(--border)"><div class="sc-label">Transactions</div><div class="sc-val" style="color:var(--text)">'+D.transactions.length+'</div><div class="sc-sub">uploaded total</div></div>'+
+  '</div>'
+  )+
 
   '<div class="snap-divider fi" style="animation-delay:.1s"></div>'+
   '<div class="snap-section-title fi" style="animation-delay:.1s">Monthly breakdown &middot; '+monthLabel+'</div>'+
@@ -451,9 +524,52 @@ function homeView(){
   '</div>'+
   zeroHint+
 
+  (mIncome>0||mSpending>0?
   '<div class="snap-row fi" style="animation-delay:.15s">'+
     '<div class="snap-card '+(leftAfter>=0?"blue":"amber")+'"><div class="sc-label">Left after expenses</div><div class="sc-val">'+(leftAfter<0?"-":"")+f(Math.abs(leftAfter))+'</div><div class="sc-sub">'+(mIncome>0&&!isNaN(leftAfter)?Math.round(leftAfter/mIncome*100)+'% of income':'')+'</div></div>'+
-  '</div>'+
+  '</div>'
+  :
+  '<div class="snap-row fi" style="animation-delay:.15s">'+
+    '<div class="snap-card" style="border-color:var(--border);opacity:.7"><div class="sc-label" style="color:var(--dim)">Monthly cash flow</div><div class="sc-val" style="color:var(--dim);font-size:14px;font-weight:500">No monthly cash-flow data available yet</div><div class="sc-sub">Confirm transaction categories to unlock this insight</div></div>'+
+  '</div>'
+  )+
+
+  // ── Review status & next steps ──
+  (function(){
+    var hasActions=totalPending>0||!hasBalanceData||(mt.length===0&&D.transactions.length>0);
+    if(!hasActions)return'';
+    var html='<div class="snap-divider fi" style="animation-delay:.16s"></div>'+
+      '<div class="snap-section-title fi" style="animation-delay:.17s">What you have &amp; what to do next</div>';
+    // Review status summary
+    html+='<div class="fi" style="animation-delay:.18s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text)">Data status</span>'+
+        '<span style="font-size:11px;color:var(--dim)">'+D.transactions.length+' total transaction'+(D.transactions.length!==1?'s':'')+'</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    if(totalConfirmed>0)html+='<span style="display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(34,197,94,.12);color:var(--green)">'+totalConfirmed+' confirmed</span>';
+    if(totalPending>0)html+='<span style="display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(245,158,11,.12);color:var(--amber)">'+totalPending+' pending review</span>';
+    var uncatCount=D.transactions.filter(function(t){return t.category==="Uncategorized"}).length;
+    if(uncatCount>0)html+='<span style="display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;background:rgba(100,116,139,.12);color:var(--dim)">'+uncatCount+' uncategorised</span>';
+    html+='</div></div>';
+    // Actionable CTA cards
+    if(totalPending>0)html+='<div class="fi" onclick="openReviewWizard()" style="animation-delay:.2s;cursor:pointer;background:var(--abg);border:1px solid rgba(245,158,11,.25);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'+
+      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(245,158,11,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--amber)">Review &amp; confirm transactions</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Confirm suggested categories to unlock spending insights and monthly totals</div></div>'+
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'+
+    '</div>';
+    if(!hasBalanceData)html+='<div class="fi" onclick="cv=\'upload\';document.querySelectorAll(\'.ni\').forEach(function(e){e.classList.toggle(\'on\',e.dataset.v===\'upload\')});destroyCharts();render()" style="animation-delay:.22s;cursor:pointer;background:var(--pbg);border:1px solid rgba(168,85,247,.25);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'+
+      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(168,85,247,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--purple)">Upload a statement with balances</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Add a statement that includes account balances to calculate net worth</div></div>'+
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'+
+    '</div>';
+    if(mt.length===0&&D.transactions.length>0)html+='<div class="fi" onclick="cv=\'transactions\';document.querySelectorAll(\'.ni\').forEach(function(e){e.classList.toggle(\'on\',e.dataset.v===\'transactions\')});destroyCharts();render()" style="animation-delay:.24s;cursor:pointer;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:14px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">'+
+      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--blue)">Browse historical transactions</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Your transactions are from other months &mdash; view them in the Transactions tab</div></div>'+
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>'+
+    '</div>';
+    return html;
+  })()+
 
   // ── Monthly category breakdown ──
   monthCategoryBreakdownHtml(mt,mSpending)+
@@ -674,9 +790,18 @@ async function doUpload(file){
       t.type=t.suggestedType==="Non-Transactional"?"Non-Transactional":"Expense";
       t.confirmed=false;
     });
+    // Store parseStats for dashboard display
+    data.parseStats=data.parseStats||null;
     D=data;
     buildAccounts();
-    toast(data.transactions.length+" transactions ready for review");
+    // Build and show import summary
+    var summaryMsg=data.transactions.length+" transactions ready for review";
+    if(data.parseStats){
+      var ps=data.parseStats;
+      summaryMsg=ps.validDates+" of "+data.transactions.length+" transactions with valid dates";
+      if(ps.failedDates>0)summaryMsg+=", "+ps.failedDates+" rows had unreadable dates";
+    }
+    toast(summaryMsg);
     render();
     // Open review wizard for ALL transactions so user can approve suggestions
     setTimeout(function(){openReviewWizard()},500);
