@@ -236,10 +236,11 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 </nav>
 
 <script>
-var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
-var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Family Support":"#f97316","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
+var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
+var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){return n==null?"£0":"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
+function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
 
 var D=null,charts={},cv="home",selAcct="all";
 var hubSection=null; // tracks which "more" sub-section is active
@@ -317,7 +318,7 @@ function expenses(){return filtered().filter(function(t){var et=t.type;if(t.cate
 function income(){return filtered().filter(function(t){var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;return et==="Income"})}
 function savings(){return filtered().filter(function(t){var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;return et==="Savings"})}
 function uncategorized(){return D?D.transactions.filter(function(t){return (t.category==="Uncategorized"||t.category==="Pending Review")&&t.type!=="Non-Transactional"}):[]}
-function tot(a){return a.reduce(function(s,r){return s+Math.abs(r.amount||r.absAmount||0)},0)}
+function tot(a){return a.reduce(function(s,r){return s+txAmt(r)},0)}
 
 function render(){
   var a=document.getElementById("app");
@@ -403,8 +404,8 @@ function homeView(){
     var effectiveType=t.type;
     if(t.category==="Pending Review"&&t.suggestedType)effectiveType=t.suggestedType;
     if(effectiveType==="Non-Transactional") return;
-    if(effectiveType==="Income")mIncome+=Math.abs(t.amount||t.absAmount||0);
-    else if(effectiveType==="Expense")mSpending+=Math.abs(t.amount||t.absAmount||0);
+    if(effectiveType==="Income")mIncome+=txAmt(t);
+    else if(effectiveType==="Expense")mSpending+=txAmt(t);
   });
   var leftAfter=mIncome-mSpending;
 
@@ -467,7 +468,7 @@ function monthCategoryBreakdownHtml(mt,totalSpending){
     }
     if(effectiveType!=="Expense")return;
     if(!catMap[effectiveCat])catMap[effectiveCat]={total:0,count:0};
-    catMap[effectiveCat].total+=t.absAmount;
+    catMap[effectiveCat].total+=txAmt(t);
     catMap[effectiveCat].count++;
   });
   var cats=Object.entries(catMap).map(function(e){
@@ -536,7 +537,7 @@ function recentTransactionsHtml(mt){
     grp.txns.forEach(function(t){
       var et=t.type;
       if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
-      if(et==="Expense")dayTotal+=t.absAmount;
+      if(et==="Expense")dayTotal+=txAmt(t);
     });
     html+='<div class="fi" style="animation-delay:'+(.37+g*0.02)+'s;display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px">'+
       '<span style="font-size:11px;font-weight:600;color:var(--muted)">'+grp.label+'</span>'+
@@ -556,7 +557,7 @@ function recentTransactionsHtml(mt){
           '<div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+escHtml(t.description)+'</div>'+
           '<div style="font-size:10px;color:var(--dim);margin-top:2px">'+displayCat+'</div>'+
         '</div>'+
-        '<div style="font-size:13px;font-weight:700;color:'+amtColor+';flex-shrink:0;margin-left:8px">'+amtPrefix+f(t.absAmount)+'</div>'+
+        '<div style="font-size:13px;font-weight:700;color:'+amtColor+';flex-shrink:0;margin-left:8px">'+amtPrefix+f(txAmt(t))+'</div>'+
       '</div>';
       shown++;
     }
@@ -704,7 +705,7 @@ function groupUncategorized(items){
       };
     }
     map[key].transactions.push(t);
-    map[key].total+=t.absAmount;
+    map[key].total+=txAmt(t);
     // Use the shortest description as display name (usually cleanest)
     if(t.description.length<map[key].displayName.length){
       map[key].displayName=t.description;
@@ -791,24 +792,21 @@ function smartSuggest(desc,txns){
   if(/\b(salon|barber|hairdresser|hair|beauty|nail|spa|wax|facial|massage|grooming|cosmetic|makeup|skincare|perfume)\b/.test(lower)) return "Personal Care";
   // Savings
   if(/\b(sav(e|ing)|invest|isa\b|premium\s+bond|unit\s+trust|money\s+market|fixed\s+deposit|etf|index\s+fund|retirement|provident)\b/.test(lower)) return "Savings";
-  // Family Support
-  if(/\b(church|charity|donat|tithe|offering|zakat|ngo|foundation|fundrais|sponsor)\b/.test(lower)) return "Family Support";
-  if(/\b(transfer|trfr|eft|send|remit|allowance)\b/.test(lower)&&/\b(to\s|family|child|parent|mother|father|wife|husband|gift)\b/.test(lower)) return "Family Support";
   // Bank Fees
   if(/\b(fee|charge|admin|penalty|interest\s+charge|overdraft|insufficient|nsf|rejected|unpaid|bounce|ledger|service\s+fee|transaction\s+fee|card\s+fee|account\s+fee|monthly\s+fee|sms\s+fee)\b/.test(lower)) return "Bank Fees";
   // Fallback heuristics
   if(/\b(pos|point\s+of\s+sale|card\s+purchase)\b/.test(lower)) return "Shopping";
   if(/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Family Support";
+  if(/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Cash Transfer";
   // Check amount patterns — very small recurring amounts might be subscriptions
   if(txns&&txns.length>=2){
-    var amounts=txns.map(function(t){return t.absAmount});
+    var amounts=txns.map(function(t){return txAmt(t)});
     var allSame=amounts.every(function(a){return Math.abs(a-amounts[0])<0.1});
     if(allSame&&amounts[0]<100) return "Subscriptions";
   }
   // Fallback: suggest based on amount size and transaction count
   if(txns&&txns.length>0){
-    var avgAmt=txns.reduce(function(s,t){return s+t.absAmount},0)/txns.length;
+    var avgAmt=txns.reduce(function(s,t){return s+txAmt(t)},0)/txns.length;
     if(avgAmt<15) return "Eating Out";
     if(avgAmt<50) return "Shopping";
     if(avgAmt<150) return "Bills & Utilities";
@@ -969,7 +967,7 @@ function showBatchModal(){
               (alternatives.length>0?'<div style="margin:4px 0 0 30px;display:flex;gap:4px;flex-wrap:wrap">'+alternatives.map(function(alt){return'<div class="quick-accept" data-action="quickAccept" data-cat="'+alt+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--s1);border:1px solid var(--border);cursor:pointer;font-size:10px;font-weight:500;color:var(--muted)">'+alt+'</div>'}).join("")+'</div>':'')+
               (g.transactions.length>1?'<div class="group-expand" data-action="expand">'+(isExpanded?"Hide":"Show")+' '+g.transactions.length+' transactions</div>':'')+
               (isExpanded?'<div class="group-txns">'+g.transactions.map(function(t){
-                return '<div class="group-txn"><span class="txn-desc">'+escHtml(t.description)+'</span><span>'+t.date+'</span><span style="margin-left:8px;font-weight:600">-'+f(t.absAmount)+'</span></div>';
+                return '<div class="group-txn"><span class="txn-desc">'+escHtml(t.description)+'</span><span>'+t.date+'</span><span style="margin-left:8px;font-weight:600">-'+f(txAmt(t))+'</span></div>';
               }).join("")+'</div>':'')+
             '</div>';
           }).join("")
@@ -1154,9 +1152,9 @@ function recalcAnalysis(){
       effectiveType=t.suggestedType;
     }
     if(effectiveType==="Non-Transactional") return;
-    if(effectiveType==="Income")totalIncome+=t.absAmount;
-    else if(effectiveType==="Savings")totalSavings+=t.absAmount;
-    else totalExpenses+=t.absAmount;
+    if(effectiveType==="Income")totalIncome+=txAmt(t);
+    else if(effectiveType==="Savings")totalSavings+=txAmt(t);
+    else totalExpenses+=txAmt(t);
   });
   D.analysis.totalIncome=Math.round(totalIncome*100)/100;
   D.analysis.totalExpenses=Math.round(totalExpenses*100)/100;
@@ -1174,7 +1172,7 @@ function recalcAnalysis(){
     }
     if(effectiveType!=="Expense")return;
     if(!catMap[effectiveCat])catMap[effectiveCat]={total:0,count:0};
-    catMap[effectiveCat].total+=t.absAmount;
+    catMap[effectiveCat].total+=txAmt(t);
     catMap[effectiveCat].count++;
   });
   D.analysis.categoryBreakdown=Object.entries(catMap).map(function(e){
@@ -1269,7 +1267,7 @@ function txnView(){
           '</div>'+
         '</div>'+
         '<div class="txn-amount" style="color:'+amtColor+'">'+
-          '<div>'+amtPrefix+f(t.absAmount)+'</div>'+
+          '<div>'+amtPrefix+f(txAmt(t))+'</div>'+
           (t.balance!=null?'<div class="txn-bal">Bal: '+f(t.balance)+'</div>':'')+
         '</div>'+
       '</div>';
@@ -1341,7 +1339,7 @@ function openCategoryModal(txn){
   bg.className="modal-bg";
   bg.innerHTML='<div class="modal">'+
     '<h3>Change Category</h3>'+
-    '<div class="modal-sub">'+escHtml(txn.description)+'<br><strong style="color:var(--red)">-'+f(txn.absAmount)+'</strong> &middot; '+txn.date+'<br>Current: <span style="color:var(--purple)">'+txn.category+'</span></div>'+
+    '<div class="modal-sub">'+escHtml(txn.description)+'<br><strong style="color:var(--red)">-'+f(txAmt(txn))+'</strong> &middot; '+txn.date+'<br>Current: <span style="color:var(--purple)">'+txn.category+'</span></div>'+
     CATS.filter(function(c){return c!=="Uncategorized"}).map(function(c){
       return '<div class="cat-opt" data-cat="'+c+'"><div class="dot" style="background:'+cc(c)+'"></div><span>'+c+'</span>'+(txn.category===c?' <span style="margin-left:auto;font-size:11px;color:var(--purple)">&#10003; current</span>':'')+'</div>';
     }).join("")+
@@ -1450,7 +1448,7 @@ function dashboardView(){
   D.transactions.forEach(function(t){
     if(!typeStats[t.type])typeStats[t.type]={count:0,total:0};
     typeStats[t.type].count++;
-    typeStats[t.type].total+=t.absAmount;
+    typeStats[t.type].total+=txAmt(t);
   });
   html+='<div class="sec fi" style="animation-delay:.25s"><div class="ccard"><h3>Transaction Distribution</h3>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">';
@@ -1540,7 +1538,7 @@ function breakdownView(){
         html+='<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:11px">'+
           '<span style="color:var(--dim);flex-shrink:0;min-width:70px">'+txn.date+'</span>'+
           '<span style="flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+escHtml(txn.description)+'</span>'+
-          '<span style="color:var(--red);font-weight:600;flex-shrink:0">-'+f(txn.absAmount)+'</span>'+
+          '<span style="color:var(--red);font-weight:600;flex-shrink:0">-'+f(txAmt(txn))+'</span>'+
         '</div>';
       }
       if(catTxns.length>showMax){
@@ -1611,7 +1609,7 @@ function insightsView(){
   }
 
   // Biggest single transactions
-  var biggest=expenses().slice().sort(function(a,b){return b.absAmount-a.absAmount}).slice(0,5);
+  var biggest=expenses().slice().sort(function(a,b){return txAmt(b)-txAmt(a)}).slice(0,5);
   if(biggest.length>0){
     html+='<div class="sec fi" style="animation-delay:.15s"><div class="stitle">Largest Expenses</div>';
     for(var j=0;j<biggest.length;j++){
@@ -1619,7 +1617,7 @@ function insightsView(){
       html+='<div class="row"><div class="dot" style="background:'+cc(t.category)+'"></div><div style="flex:1">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
           '<span class="rname" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%">'+t.description+'</span>'+
-          '<span class="ramt" style="color:var(--red)">-'+f(t.absAmount)+'</span>'+
+          '<span class="ramt" style="color:var(--red)">-'+f(txAmt(t))+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:6px;align-items:center;margin-top:3px">'+
           '<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:var(--s2);color:var(--dim)">'+t.category+'</span>'+
@@ -1782,7 +1780,7 @@ function moreView(){
   html+='<div class="hub-menu fi">';
   var items=[
     {key:"spending",name:"Spending",sub:"Category breakdown",icon:"&#128176;",bg:"var(--rbg)",color:"var(--red)"},
-    {key:"income",name:"Income",sub:"Track income sources",icon:"&#128178;",bg:"var(--gbg)",color:"var(--green)"},
+    {key:"income",name:"Income",sub:"Track your earnings",icon:"&#128178;",bg:"var(--gbg)",color:"var(--green)"},
     {key:"budget",name:"Budget",sub:"Planned vs actual",icon:"&#128200;",bg:"var(--pbg)",color:"var(--purple)"},
     {key:"subscriptions",name:"Subscriptions",sub:"Recurring services",icon:"&#128257;",bg:"rgba(6,182,212,.1)",color:"var(--cyan)"},
     {key:"savings-goals",name:"Savings Goals",sub:"Track your targets",icon:"&#127919;",bg:"var(--abg)",color:"var(--amber)"},
@@ -1801,7 +1799,6 @@ function moreView(){
 
 function hubSectionView(section){
   if(section==="spending")return breakdownView();
-  if(section==="income")return incomeView();
   if(section==="budget")return budgetView();
   if(section==="subscriptions")return subscriptionsView();
   if(section==="savings-goals")return savingsGoalsView();
@@ -1810,6 +1807,7 @@ function hubSectionView(section){
   if(section==="bills")return billsView();
   if(section==="emergency")return emergencyView();
   if(section==="financial-goals")return financialGoalsView();
+  if(section==="income")return incomeView();
   return moreView();
 }
 
@@ -1835,7 +1833,6 @@ function bindHubEvents(){
     openReviewWizard();
   });
   // Bind section-specific events
-  if(hubSection==="income")bindIncomeEvents();
   if(hubSection==="budget")bindBudgetEvents();
   if(hubSection==="subscriptions")bindSubscriptionsEvents();
   if(hubSection==="savings-goals")bindSavingsEvents();
@@ -1844,6 +1841,7 @@ function bindHubEvents(){
   if(hubSection==="bills")bindBillsEvents();
   if(hubSection==="emergency")bindEmergencyEvents();
   if(hubSection==="financial-goals")bindGoalsEvents();
+  if(hubSection==="income")bindIncomeEvents();
 }
 
 async function loadHubSection(section){
@@ -1871,7 +1869,7 @@ function incomeView(){
   var txnIncome=0;
   if(D&&D.transactions){
     var confirmedIncome=D.transactions.filter(function(t){return t.confirmed!==false&&t.type==="Income"});
-    txnIncome=confirmedIncome.reduce(function(s,t){return s+t.absAmount},0);
+    txnIncome=confirmedIncome.reduce(function(s,t){return s+txAmt(t)},0);
   }
 
   // Summary
@@ -2021,7 +2019,7 @@ function subscriptionsView(){
   var txnSubTotal=0;
   if(D&&D.transactions){
     var confirmedSubs=D.transactions.filter(function(t){return t.confirmed!==false&&t.category==="Subscriptions"});
-    txnSubTotal=confirmedSubs.reduce(function(s,t){return s+t.absAmount},0);
+    txnSubTotal=confirmedSubs.reduce(function(s,t){return s+txAmt(t)},0);
   }
 
   // Summary
@@ -2589,9 +2587,9 @@ async function syncTransactionsToHub(){
     if(!billGroups[key]){
       billGroups[key]={name:t.description,total:0,count:0,amounts:[]};
     }
-    billGroups[key].total+=t.absAmount;
+    billGroups[key].total+=txAmt(t);
     billGroups[key].count++;
-    billGroups[key].amounts.push(t.absAmount);
+    billGroups[key].amounts.push(txAmt(t));
   });
 
   // Extract subscriptions
@@ -2602,9 +2600,9 @@ async function syncTransactionsToHub(){
     if(!subGroups[key]){
       subGroups[key]={name:t.description,total:0,count:0,amounts:[]};
     }
-    subGroups[key].total+=t.absAmount;
+    subGroups[key].total+=txAmt(t);
     subGroups[key].count++;
-    subGroups[key].amounts.push(t.absAmount);
+    subGroups[key].amounts.push(txAmt(t));
   });
 
   // Extract income sources
@@ -2615,9 +2613,9 @@ async function syncTransactionsToHub(){
     if(!incomeGroups[key]){
       incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.category};
     }
-    incomeGroups[key].total+=t.absAmount;
+    incomeGroups[key].total+=txAmt(t);
     incomeGroups[key].count++;
-    incomeGroups[key].amounts.push(t.absAmount);
+    incomeGroups[key].amounts.push(txAmt(t));
   });
 
   // Sync bills to hub
@@ -2689,7 +2687,7 @@ async function syncTransactionsToHub(){
     var catTotals={};
     confirmed.filter(function(t){return t.type==="Expense"}).forEach(function(t){
       if(!catTotals[t.category])catTotals[t.category]=0;
-      catTotals[t.category]+=t.absAmount;
+      catTotals[t.category]+=txAmt(t);
     });
 
     // Update existing budget lines with actual amounts or add new ones

@@ -57,8 +57,7 @@ const CATEGORY_RULES = [
   { category: "Entertainment", keywords: ["cinema", "odeon", "cineworld", "vue", "theatre", "concert", "ticket", "ticketmaster", "eventbrite", "gaming", "steam", "playstation store", "nintendo", "bowling", "museum", "zoo", "theme park", "ster-kinekor", "nu metro", "computicket", "webtickets", "festival", "event", "arcade", "laser", "escape room", "comedy", "show", "performance", "gallery", "aquarium", "funfair", "amusement"] },
   { category: "Education", keywords: ["udemy", "coursera", "skillshare", "book", "waterstones", "wh smith", "tuition", "school", "university", "student", "course", "college", "academy", "training", "workshop", "seminar", "exam", "certification", "study", "learning", "lecture", "textbook", "stationery", "cna ", "exclusive books", "loot.co", "kindle", "amazon book"] },
   { category: "Personal Care", keywords: ["barber", "hairdresser", "salon", "spa", "beauty", "nail", "lush", "the body shop", "perfume", "cosmetic", "makeup", "skincare", "grooming", "massage", "facial", "wax", "sorbet", "rain salon", "reed & barton", "dermatolog", "aesthetic"] },
-  { category: "Family Support", keywords: ["transfer to", "family", "gift", "charity", "donation", "send money", "remittance", "allowance", "pocket money", "church", "tithe", "offering", "zakat", "support", "maintenance"] },
-  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer"] },
+  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer", "transfer to", "send money", "remittance"] },
   { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
   { category: "Savings", keywords: ["savings", "save", "investment", "isa", "premium bond", "vanguard", "trading 212", "freetrade", "nutmeg", "moneybox", "unit trust", "money market", "fixed deposit", "notice deposit", "capitec save", "fnb save", "easy equities", "etf", "satrix", "sygnia", "allan gray", "coronation", "stanlib"] },
   { category: "Cash Withdrawal", keywords: ["atm", "cash withdrawal", "withdraw", "cash send", "cardless"] },
@@ -173,7 +172,12 @@ function parseAmount(val) {
 function findColumn(headers, tests) {
   return headers.findIndex((h) => {
     const lower = h.toLowerCase().trim();
-    return tests.some((t) => lower.includes(t));
+    return tests.some((t) => {
+      // Short tokens like "cr", "dr" must match exactly or as a whole word
+      // to avoid false positives (e.g. "description" contains "cr")
+      if (t.length <= 2) return lower === t || new RegExp("\\b" + t + "\\b").test(lower);
+      return lower.includes(t);
+    });
   });
 }
 
@@ -252,10 +256,6 @@ function suggestCategory(description) {
   // ── Savings ──
   if (/\b(sav(e|ing)|invest|isa\b|premium\s+bond|unit\s+trust|money\s+market|fixed\s+deposit|notice\s+deposit|etf|index\s+fund|retirement|provident|pension\s+fund|annuity\s+contrib)\b/.test(lower)) return "Savings";
 
-  // ── Family Support ──
-  if (/\b(transfer|trfr|eft|send|remit|allowance|pocket\s+money|support|maintenance)\b/.test(lower) && /\b(to\s|family|child|parent|mother|father|wife|husband|spouse|brother|sister|son|daughter|gift|church|charity|donat|tithe|offering|zakat|mosque|temple)\b/.test(lower)) return "Family Support";
-  if (/\b(church|charity|donat|tithe|offering|zakat|ngo|foundation|fundrais|sponsor)\b/.test(lower)) return "Family Support";
-
   // ── Bank Fees ──
   if (/\b(fee|charge|admin|penalty|interest\s+charge|overdraft|insufficient|nsf|rejected|unpaid|bounce|ledger\s+fee|service\s+fee|transaction\s+fee|card\s+fee|annual\s+card|account\s+fee|monthly\s+fee|eft\s+fee|debit\s+order\s+fee|notification\s+fee|sms\s+fee|excess\s+fee)\b/.test(lower)) return "Bank Fees";
 
@@ -264,8 +264,8 @@ function suggestCategory(description) {
   if (/\b(pos|point\s+of\s+sale|card\s+purchase|purchase|buy)\b/.test(lower)) return "Shopping";
   // Generic payments — if "pay" with no other context, likely bills
   if (/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
-  // Transfers without clear destination — family support as best guess
-  if (/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Family Support";
+  // Transfers without clear destination — treat as cash transfer
+  if (/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Cash Transfer";
 
   return null;
 }
@@ -349,8 +349,8 @@ function parseExcelSheet(rows, headers, learnedMappings) {
   const dateCol = findColumn(headers, ["date"]);
   const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "particulars", "payee", "beneficiary", "merchant", "seller"]);
   const amountCol = findColumn(headers, ["amount", "value"]);
-  const debitCol = findColumn(headers, ["debit", "money out", "paid out", "withdrawal", "dr"]);
-  const creditCol = findColumn(headers, ["credit", "money in", "paid in", "deposit", "cr"]);
+  const debitCol = findColumn(headers, ["debit", "money out", "paid out", "payments out", "pay out", "withdrawal", "outgoing", "dr"]);
+  const creditCol = findColumn(headers, ["credit", "money in", "paid in", "payments in", "pay in", "deposit", "receipts", "received", "incoming", "cr"]);
   const balanceCol = findColumn(headers, ["balance", "running balance", "closing balance"]);
   const typeCol = findColumn(headers, ["type", "transaction type", "dr/cr", "dr cr", "entry type"]);
 
@@ -402,6 +402,16 @@ function parseExcelSheet(rows, headers, learnedMappings) {
       amount = credit - debit;
     } else if (amountCol >= 0) {
       amount = parseAmount(values[amountCol]);
+      // If a type column exists (DR/CR), use it to determine sign direction
+      if (typeCol >= 0) {
+        const typeVal = String(values[typeCol] || "").toLowerCase().trim();
+        const absAmt = Math.abs(amount);
+        if (typeVal === "cr" || typeVal === "credit" || typeVal === "cre" || typeVal === "c") {
+          amount = absAmt; // credit = positive (income)
+        } else if (typeVal === "dr" || typeVal === "debit" || typeVal === "deb" || typeVal === "d") {
+          amount = -absAmt; // debit = negative (expense)
+        }
+      }
     }
 
     const balance = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
@@ -492,6 +502,7 @@ function verifyAndFixOrientation(transactions) {
     transactions.forEach(t => {
       if (t.type === "Non-Transactional") return; // don't flip non-transactional entries
       t.amount = -t.amount;
+      t.absAmount = Math.abs(t.amount);
       // Recategorize type based on new amount
       if (t.category === "Income" || t.category === "Cash In" || t.amount > 0) {
         t.type = "Income";
