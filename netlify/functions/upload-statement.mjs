@@ -1160,10 +1160,11 @@ export default async (req) => {
     const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls") ||
       file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
       file.type === "application/vnd.ms-excel";
+    const isCsv = fileName.endsWith(".csv") || file.type === "text/csv";
 
-    if (!isExcel) {
+    if (!isExcel && !isCsv) {
       return new Response(
-        JSON.stringify({ error: "Only Excel files (.xlsx, .xls) are supported." }),
+        JSON.stringify({ error: "Only Excel (.xlsx, .xls) or CSV (.csv) files are supported." }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
