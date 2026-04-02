@@ -509,7 +509,7 @@ function homeView(){
   }
   // Add date parsing failure warning if applicable
   if(unreadableDateCount>0){
-    zeroHint+='<div class="snap-hint fi" style="animation-delay:.14s;font-size:12px;color:var(--red);padding:4px 20px;text-align:center">Date parsing failed for '+unreadableDateCount+' row'+(unreadableDateCount!==1?'s':'')+' &mdash; these transactions are excluded from monthly totals. Check the Import Summary above for details.</div>';
+    zeroHint+='<div class="snap-hint fi" style="animation-delay:.14s;font-size:12px;color:var(--red);padding:4px 20px;text-align:center">Date parsing failed for '+unreadableDateCount+' row'+(unreadableDateCount!==1?'s':'')+' &mdash; these transactions are excluded from monthly totals. Check the Import Summary in the Tracker tab for details.</div>';
   }
 
   var lm=latestMonth();
@@ -517,66 +517,7 @@ function homeView(){
 
   return'<div class="head fi"><h1>Finance Hub</h1><div class="live"></div></div>'+
   acctSelector()+
-  // ── Import summary card (shows date parsing stats) ──
-  (function(){
-    if(!D||!D.parseStats)return'';
-    var ps=D.parseStats;
-    var txnCount=D.transactions.length;
-    var validCount=ps.validDates;
-    var failedCount=ps.failedDates;
-    var totalParsed=validCount+failedCount;
-    var lines=[];
-    lines.push('<strong>Rows processed:</strong> '+ps.totalRows+(totalParsed!==ps.totalRows?' ('+totalParsed+' had date values)':''));
-    lines.push('<strong>Transactions imported:</strong> <span style="color:var(--green)">'+txnCount+'</span>'+(failedCount>0?' &middot; <span style="color:var(--red)">'+failedCount+' row'+(failedCount!==1?'s':'')+' failed date parsing</span>':''));
-    if(ps.dateRangeMin&&ps.dateRangeMax){
-      var minParts=ps.dateRangeMin.split("-");
-      var maxParts=ps.dateRangeMax.split("-");
-      var minLabel=minParts[2]+"/"+minParts[1]+"/"+minParts[0];
-      var maxLabel=maxParts[2]+"/"+maxParts[1]+"/"+maxParts[0];
-      lines.push('<strong>Date range:</strong> '+minLabel+' &rarr; '+maxLabel);
-    }
-    // Months covered
-    var mons=availableMonths();
-    if(mons.length>0)lines.push('<strong>Months covered:</strong> '+mons.length+' ('+monthName(mons[mons.length-1].m)+' '+mons[mons.length-1].y+' &ndash; '+monthName(mons[0].m)+' '+mons[0].y+')');
-    // Categorisation counts
-    var catConfirmed=D.transactions.filter(function(t){return t.confirmed===true}).length;
-    var catPending=D.transactions.filter(function(t){return t.confirmed===false&&t.category==="Pending Review"}).length;
-    var catUncategorized=D.transactions.filter(function(t){return t.category==="Uncategorized"}).length;
-    var catCategorised=D.transactions.filter(function(t){return t.confirmed===true&&t.category!=="Uncategorized"&&t.category!=="Pending Review"}).length;
-    lines.push('<strong>Categorised:</strong> <span style="color:var(--green)">'+catCategorised+'</span> &middot; <strong>Pending review:</strong> <span style="color:var(--amber)">'+catPending+'</span>'+(catUncategorized>0?' &middot; <strong>Uncategorised:</strong> <span style="color:var(--dim)">'+catUncategorized+'</span>':''));
-    var lmNow=latestMonth();
-    if(lmNow)lines.push('<strong>Viewing month:</strong> '+monthName(lmNow.m)+' '+lmNow.y+' ('+monthlyTxns().length+' transaction'+(monthlyTxns().length!==1?'s':'')+')');
-    // Date column info
-    if(ps.dateColumnsUsed&&ps.dateColumnsUsed.length>0){
-      var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+c.column+'" ('+c.type+') in '+c.sheet}).join(', ');
-      lines.push('<strong>Date column used:</strong> '+colInfo);
-      if(ps.dateColumnsUsed[0].allColumns&&ps.dateColumnsUsed[0].allColumns.length>1){
-        lines.push('<strong>Other date columns found:</strong> '+ps.dateColumnsUsed[0].allColumns.slice(1).join(', '));
-      }
-    }
-    if(ps.dateOrder)lines.push('<strong>Date format detected:</strong> '+(ps.dateOrder==="day-first"?"Day-first (DD/MM/YYYY)":"Month-first (MM/DD/YYYY)"));
-    // Balance detection results
-    if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+ps.openingBalanceRow.description+')</span>':''));
-    if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+ps.closingBalanceRow.description+')</span>':''));
-    if(ps.openingBalance!=null||ps.closingBalance!=null)lines.push('<strong>Balance source:</strong> '+ps.balanceSource);
-    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+r.description+'"'}).join(', '));
-    if(ps.summaryTotalsRowDetected){
-      var sumLine='<strong>Totals summary row:</strong> <span style="color:var(--dim)">detected</span>';
-      if(ps.summaryTotalPaidIn!=null)sumLine+=' &middot; Paid in: '+f(ps.summaryTotalPaidIn);
-      if(ps.summaryTotalPaidOut!=null)sumLine+=' &middot; Paid out: '+f(ps.summaryTotalPaidOut);
-      lines.push(sumLine);
-    }
-    // Failed rows detail
-    if(failedCount>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
-      var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+r.rawValue+'"'+(r.sheet?' ('+r.sheet+')':'')}).join(', ');
-      lines.push('<strong>Unreadable date examples:</strong> '+examples);
-    }
-    return'<div class="fi" style="animation-delay:.02s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;font-size:12px;line-height:1.8">'+
-      '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Import Summary</div>'+
-      lines.join('<br>')+
-    '</div>';
-  })()+
-  (pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
+  (pendingReview(pendingReview().length>0?'<div class="uncat-banner fi" onclick="openReviewWizard()" style="margin-bottom:14px"><h3>'+pendingReview().length+' transactions pending review</h3><p>Tap to review and approve suggested categories</p></div>':'')+
   '<div class="snap-hero fi">'+
     '<div class="nw-label">Net Worth</div>'+
     (hasBalanceData?
@@ -902,6 +843,8 @@ async function doUpload(file){
     }
     toast(summaryMsg);
     render();
+    // Sync detected items to tracker immediately (using suggestedCategory for unconfirmed)
+    syncTransactionsToHub();
     // Open review wizard for ALL transactions so user can approve suggestions
     setTimeout(function(){openReviewWizard()},500);
   }catch(e){
@@ -2009,6 +1952,61 @@ function trackerView(){
   if(trackerSection)return trackerSectionView(trackerSection);
   var html='<div class="head fi"><h1>Tracker</h1><div class="live"></div></div>';
   html+='<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:12px;padding:10px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)" class="fi">Confirmed items from uploaded bank statements are automatically synced here.</div>';
+
+  // ── Import summary card (shows date parsing stats) ──
+  html+=(function(){
+    if(!D||!D.parseStats)return'';
+    var ps=D.parseStats;
+    var txnCount=D.transactions.length;
+    var validCount=ps.validDates;
+    var failedCount=ps.failedDates;
+    var totalParsed=validCount+failedCount;
+    var lines=[];
+    lines.push('<strong>Rows processed:</strong> '+ps.totalRows+(totalParsed!==ps.totalRows?' ('+totalParsed+' had date values)':''));
+    lines.push('<strong>Transactions imported:</strong> <span style="color:var(--green)">'+txnCount+'</span>'+(failedCount>0?' &middot; <span style="color:var(--red)">'+failedCount+' row'+(failedCount!==1?'s':'')+' failed date parsing</span>':''));
+    if(ps.dateRangeMin&&ps.dateRangeMax){
+      var minParts=ps.dateRangeMin.split("-");
+      var maxParts=ps.dateRangeMax.split("-");
+      var minLabel=minParts[2]+"/"+minParts[1]+"/"+minParts[0];
+      var maxLabel=maxParts[2]+"/"+maxParts[1]+"/"+maxParts[0];
+      lines.push('<strong>Date range:</strong> '+minLabel+' &rarr; '+maxLabel);
+    }
+    var mons=availableMonths();
+    if(mons.length>0)lines.push('<strong>Months covered:</strong> '+mons.length+' ('+monthName(mons[mons.length-1].m)+' '+mons[mons.length-1].y+' &ndash; '+monthName(mons[0].m)+' '+mons[0].y+')');
+    var catConfirmed=D.transactions.filter(function(t){return t.confirmed===true}).length;
+    var catPending=D.transactions.filter(function(t){return t.confirmed===false&&t.category==="Pending Review"}).length;
+    var catUncategorized=D.transactions.filter(function(t){return t.category==="Uncategorized"}).length;
+    var catCategorised=D.transactions.filter(function(t){return t.confirmed===true&&t.category!=="Uncategorized"&&t.category!=="Pending Review"}).length;
+    lines.push('<strong>Categorised:</strong> <span style="color:var(--green)">'+catCategorised+'</span> &middot; <strong>Pending review:</strong> <span style="color:var(--amber)">'+catPending+'</span>'+(catUncategorized>0?' &middot; <strong>Uncategorised:</strong> <span style="color:var(--dim)">'+catUncategorized+'</span>':''));
+    var lmNow=latestMonth();
+    if(lmNow)lines.push('<strong>Viewing month:</strong> '+monthName(lmNow.m)+' '+lmNow.y+' ('+monthlyTxns().length+' transaction'+(monthlyTxns().length!==1?'s':'')+')');
+    if(ps.dateColumnsUsed&&ps.dateColumnsUsed.length>0){
+      var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+c.column+'" ('+c.type+') in '+c.sheet}).join(', ');
+      lines.push('<strong>Date column used:</strong> '+colInfo);
+      if(ps.dateColumnsUsed[0].allColumns&&ps.dateColumnsUsed[0].allColumns.length>1){
+        lines.push('<strong>Other date columns found:</strong> '+ps.dateColumnsUsed[0].allColumns.slice(1).join(', '));
+      }
+    }
+    if(ps.dateOrder)lines.push('<strong>Date format detected:</strong> '+(ps.dateOrder==="day-first"?"Day-first (DD/MM/YYYY)":"Month-first (MM/DD/YYYY)"));
+    if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+ps.openingBalanceRow.description+')</span>':''));
+    if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+ps.closingBalanceRow.description+')</span>':''));
+    if(ps.openingBalance!=null||ps.closingBalance!=null)lines.push('<strong>Balance source:</strong> '+ps.balanceSource);
+    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+r.description+'"'}).join(', '));
+    if(ps.summaryTotalsRowDetected){
+      var sumLine='<strong>Totals summary row:</strong> <span style="color:var(--dim)">detected</span>';
+      if(ps.summaryTotalPaidIn!=null)sumLine+=' &middot; Paid in: '+f(ps.summaryTotalPaidIn);
+      if(ps.summaryTotalPaidOut!=null)sumLine+=' &middot; Paid out: '+f(ps.summaryTotalPaidOut);
+      lines.push(sumLine);
+    }
+    if(failedCount>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
+      var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+r.rawValue+'"'+(r.sheet?' ('+r.sheet+')':'')}).join(', ');
+      lines.push('<strong>Unreadable date examples:</strong> '+examples);
+    }
+    return'<div class="fi" style="animation-delay:.02s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;font-size:12px;line-height:1.8">'+
+      '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px">Import Summary</div>'+
+      lines.join('<br>')+
+    '</div>';
+  })();
 
   // Count pending detected items per collection
   var subDetected=((hubCache["subscriptions"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus==="detected"}).length;
@@ -3606,7 +3604,9 @@ async function syncTransactionsToHub(){
   var confirmed=D.transactions.filter(function(t){return t.confirmed!==false});
 
   // Extract unique recurring bills from "Bills & Utilities" transactions
-  var billTxns=confirmed.filter(function(t){return t.category==="Bills & Utilities"});
+  var billTxns=D.transactions.filter(function(t){
+    return t.category==="Bills & Utilities"||(t.confirmed===false&&t.suggestedCategory==="Bills & Utilities");
+  });
   var billGroups={};
   billTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
@@ -3621,7 +3621,9 @@ async function syncTransactionsToHub(){
   });
 
   // Extract subscriptions
-  var subTxns=confirmed.filter(function(t){return t.category==="Subscriptions"});
+  var subTxns=D.transactions.filter(function(t){
+    return t.category==="Subscriptions"||(t.confirmed===false&&t.suggestedCategory==="Subscriptions");
+  });
   var subGroups={};
   subTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
@@ -3636,12 +3638,14 @@ async function syncTransactionsToHub(){
   });
 
   // Extract income sources
-  var incomeTxns=confirmed.filter(function(t){return t.type==="Income"});
+  var incomeTxns=D.transactions.filter(function(t){
+    return t.type==="Income"||(t.confirmed===false&&t.suggestedType==="Income");
+  });
   var incomeGroups={};
   incomeTxns.forEach(function(t){
     var key=normalizeDesc(t.description);
     if(!incomeGroups[key]){
-      incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.category,lastDate:"",dates:[]};
+      incomeGroups[key]={name:t.description,total:0,count:0,amounts:[],category:t.suggestedCategory||t.category,lastDate:"",dates:[]};
     }
     incomeGroups[key].total+=txAmt(t);
     incomeGroups[key].count++;
