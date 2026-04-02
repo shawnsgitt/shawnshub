@@ -181,6 +181,163 @@ function findColumn(headers, tests) {
   });
 }
 
+// ───────── SMART DATE COLUMN DETECTION ─────────
+// Finds all date-like columns and ranks them by priority
+const DATE_COLUMN_PRIORITY = [
+  { labels: ["transaction date", "txn date", "trans date"], rank: 1, type: "transaction" },
+  { labels: ["date"], rank: 2, type: "date" },
+  { labels: ["value date", "effective date"], rank: 3, type: "value" },
+  { labels: ["booking date", "book date"], rank: 4, type: "booking" },
+  { labels: ["posted date", "posting date", "post date"], rank: 5, type: "posting" },
+  { labels: ["statement date", "stmt date"], rank: 6, type: "statement" },
+];
+
+function findDateColumns(headers) {
+  const found = [];
+  for (const rule of DATE_COLUMN_PRIORITY) {
+    const idx = headers.findIndex((h) => {
+      const lower = h.toLowerCase().trim();
+      return rule.labels.some((l) => lower === l || lower.includes(l));
+    });
+    if (idx >= 0) {
+      found.push({ index: idx, header: headers[idx], rank: rule.rank, type: rule.type });
+    }
+  }
+  // Deduplicate by index (same column matched by multiple rules)
+  const seen = new Set();
+  return found.filter((c) => {
+    if (seen.has(c.index)) return false;
+    seen.add(c.index);
+    return true;
+  }).sort((a, b) => a.rank - b.rank);
+}
+
+// ───────── ROBUST DATE PARSING ─────────
+// Detect day-first vs month-first by scanning sample values
+function detectDateOrder(values) {
+  let dayFirstVotes = 0;
+  let monthFirstVotes = 0;
+  for (const val of values) {
+    if (val instanceof Date) continue;
+    const s = String(val || "").trim();
+    // Match patterns like DD/MM/YYYY or DD-MM-YYYY
+    const m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+    if (!m) continue;
+    const first = parseInt(m[1], 10);
+    const second = parseInt(m[2], 10);
+    // If first > 12, it must be day-first (e.g. 31/03/2026)
+    if (first > 12 && second <= 12) dayFirstVotes += 5;
+    // If second > 12, it must be month-first (e.g. 03/31/2026)
+    else if (second > 12 && first <= 12) monthFirstVotes += 5;
+  }
+  // Default to day-first for UK-style data
+  return dayFirstVotes >= monthFirstVotes ? "day-first" : "month-first";
+}
+
+// Excel serial date epoch: 1900-01-01 is serial 1 (with the Lotus 1-2-3 bug)
+function excelSerialToDate(serial) {
+  if (typeof serial !== "number" || serial < 1 || serial > 2958465) return null;
+  // Excel incorrectly treats 1900 as a leap year (Lotus 1-2-3 bug)
+  const adjusted = serial > 59 ? serial - 1 : serial;
+  const epoch = new Date(1899, 11, 31); // Dec 31, 1899
+  const d = new Date(epoch.getTime() + adjusted * 86400000);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
+const MONTH_NAMES = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
+  apr: 4, april: 4, may: 5, jun: 6, june: 6,
+  jul: 7, july: 7, aug: 8, august: 8, sep: 9, september: 9,
+  oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12,
+};
+
+// Parse a single date value into YYYY-MM-DD, or return null if unparseable
+function parseDate(rawValue, dateOrder) {
+  if (rawValue == null) return null;
+
+  // Already a JS Date (xlsx cellDates: true)
+  if (rawValue instanceof Date) {
+    if (isNaN(rawValue.getTime())) return null;
+    const y = rawValue.getFullYear();
+    const m = String(rawValue.getMonth() + 1).padStart(2, "0");
+    const d = String(rawValue.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  // Excel serial number
+  if (typeof rawValue === "number") {
+    const d = excelSerialToDate(rawValue);
+    if (!d) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  const s = String(rawValue).trim();
+  if (!s) return null;
+
+  // Numeric string that looks like serial date (e.g. "45678")
+  if (/^\d{4,5}$/.test(s)) {
+    const serial = parseInt(s, 10);
+    const d = excelSerialToDate(serial);
+    if (d) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  // YYYY-MM-DD (ISO)
+  const iso = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (iso) {
+    const y = parseInt(iso[1], 10);
+    const m = parseInt(iso[2], 10);
+    const d = parseInt(iso[3], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
+  // DD/MM/YYYY or MM/DD/YYYY (based on detected order)
+  const dmy = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (dmy) {
+    let first = parseInt(dmy[1], 10);
+    let second = parseInt(dmy[2], 10);
+    let year = parseInt(dmy[3], 10);
+    if (year < 100) year += 2000;
+    let day, month;
+    // Force interpretation if unambiguous
+    if (first > 12 && second <= 12) { day = first; month = second; }
+    else if (second > 12 && first <= 12) { day = second; month = first; }
+    else if (dateOrder === "day-first") { day = first; month = second; }
+    else { month = first; day = second; }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // DD Mon YYYY or DD-Mon-YYYY (e.g. "15 Jan 2026" or "15-Mar-2026")
+  const named = s.match(/^(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{2,4})$/);
+  if (named) {
+    const day = parseInt(named[1], 10);
+    const monthKey = named[2].toLowerCase();
+    let year = parseInt(named[3], 10);
+    if (year < 100) year += 2000;
+    const month = MONTH_NAMES[monthKey];
+    if (month && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  // Mon DD, YYYY (e.g. "Jan 15, 2026")
+  const namedUS = s.match(/^([a-zA-Z]+)[\s\-]+(\d{1,2}),?\s*(\d{2,4})$/);
+  if (namedUS) {
+    const monthKey = namedUS[1].toLowerCase();
+    const day = parseInt(namedUS[2], 10);
+    let year = parseInt(namedUS[3], 10);
+    if (year < 100) year += 2000;
+    const month = MONTH_NAMES[monthKey];
+    if (month && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  return null;
+}
+
 // Smart suggestion: guess a likely category from description using pattern analysis
 function suggestCategory(description) {
   const lower = (description || "").toLowerCase();
@@ -346,7 +503,13 @@ function detectSignConvention(rawEntries) {
 function parseExcelSheet(rows, headers, learnedMappings) {
   if (!rows || rows.length < 1) throw new Error("Sheet has no data rows");
 
-  const dateCol = findColumn(headers, ["date"]);
+  // ── Smart date column detection with ranking ──
+  const dateColumns = findDateColumns(headers);
+  // Fallback: generic "date" search
+  let dateCol = dateColumns.length > 0 ? dateColumns[0].index : findColumn(headers, ["date"]);
+  const dateColumnInfo = dateColumns.length > 0 ? dateColumns[0] : { header: headers[dateCol] || "unknown", type: "date", rank: 99 };
+  const allDateColumnsInfo = dateColumns.map(c => `"${c.header}" (${c.type})`);
+
   const descCol = findColumn(headers, ["description", "memo", "narrative", "details", "particulars", "payee", "beneficiary", "merchant", "seller"]);
   const amountCol = findColumn(headers, ["amount", "value"]);
   const debitCol = findColumn(headers, ["debit", "money out", "paid out", "payments out", "pay out", "withdrawal", "outgoing", "dr"]);
@@ -362,23 +525,45 @@ function parseExcelSheet(rows, headers, learnedMappings) {
     throw new Error("Could not find a Date column. Please ensure your Excel file has a Date header.");
   }
 
+  // ── Detect day-first vs month-first from sample date values ──
+  const sampleDates = rows.slice(0, Math.min(50, rows.length)).map(r => {
+    const values = headers.map(h => r[h]);
+    return values[dateCol];
+  });
+  const dateOrder = detectDateOrder(sampleDates);
+
   // Track whether we're using separate debit/credit columns
   const hasSeparateDebitCredit = (debitCol >= 0 || creditCol >= 0) && amountCol < 0;
 
-  // First pass: parse raw amounts and metadata
+  // ── First pass: parse raw amounts and dates with tracking ──
   const rawEntries = [];
+  let validDateCount = 0;
+  let failedDateCount = 0;
+  const failedDateRows = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const values = headers.map((h) => row[h]);
 
     const rawDate = values[dateCol];
+    const parsedDate = parseDate(rawDate, dateOrder);
+
+    // For display in DD/MM/YYYY format (backwards compatible with frontend)
     let date = "";
-    if (rawDate instanceof Date) {
-      const d = rawDate;
-      date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-    } else if (rawDate != null) {
-      date = String(rawDate).trim();
+    if (parsedDate) {
+      // Convert YYYY-MM-DD to DD/MM/YYYY
+      const parts = parsedDate.split("-");
+      date = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      validDateCount++;
+    } else if (rawDate != null && String(rawDate).trim() !== "") {
+      // Date exists but couldn't be parsed - flag it
+      failedDateCount++;
+      failedDateRows.push({ row: i + 1, rawValue: String(rawDate).substring(0, 50) });
+      // Still include the row but mark it
+      date = "UNREADABLE";
+    } else {
+      // No date value at all
+      continue;
     }
 
     const rawDesc = values[descCol >= 0 ? descCol : 1] != null ? String(values[descCol >= 0 ? descCol : 1]).trim() : "";
@@ -391,7 +576,7 @@ function parseExcelSheet(rows, headers, learnedMappings) {
     if (sellerVal && rawDesc && sellerVal.toLowerCase() !== rawDesc.toLowerCase()) {
       description = sellerVal + " - " + rawDesc;
     }
-    if (!date || !description) continue;
+    if (!description) continue;
 
     let amount = 0;
     if (hasSeparateDebitCredit) {
@@ -416,7 +601,7 @@ function parseExcelSheet(rows, headers, learnedMappings) {
 
     const balance = balanceCol >= 0 ? parseAmount(values[balanceCol]) : null;
 
-    rawEntries.push({ index: i, date, description, amount, balance, account: null });
+    rawEntries.push({ index: i, date, description, amount, balance, account: null, dateUnreadable: date === "UNREADABLE" });
   }
 
   // For single amount column, detect if sign convention is inverted
@@ -470,10 +655,34 @@ function parseExcelSheet(rows, headers, learnedMappings) {
       reason: result.reason,
       source: result.source,
       alternatives: result.alternatives,
+      dateUnreadable: entry.dateUnreadable || false,
     });
   }
 
-  return { transactions };
+  // Compute date range from valid dates
+  const validDates = transactions.filter(t => !t.dateUnreadable).map(t => {
+    const p = t.date.split("/");
+    return new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
+  }).filter(d => !isNaN(d.getTime())).sort((a, b) => a - b);
+
+  const dateRangeMin = validDates.length > 0 ? `${validDates[0].getFullYear()}-${String(validDates[0].getMonth() + 1).padStart(2, "0")}-${String(validDates[0].getDate()).padStart(2, "0")}` : null;
+  const dateRangeMax = validDates.length > 0 ? `${validDates[validDates.length - 1].getFullYear()}-${String(validDates[validDates.length - 1].getMonth() + 1).padStart(2, "0")}-${String(validDates[validDates.length - 1].getDate()).padStart(2, "0")}` : null;
+
+  return {
+    transactions,
+    parseStats: {
+      totalRows: rows.length,
+      validDates: validDateCount,
+      failedDates: failedDateCount,
+      failedDateRows: failedDateRows.slice(0, 20), // cap at 20 examples
+      dateColumnUsed: dateColumnInfo.header,
+      dateColumnType: dateColumnInfo.type,
+      allDateColumns: allDateColumnsInfo,
+      dateOrder,
+      dateRangeMin,
+      dateRangeMax,
+    },
+  };
 }
 
 // Post-parse: verify debit/credit orientation using balance progression
@@ -520,6 +729,16 @@ async function parseExcel(buffer) {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const allTransactions = [];
   const sheetErrors = [];
+  const aggregateParseStats = {
+    totalRows: 0,
+    validDates: 0,
+    failedDates: 0,
+    failedDateRows: [],
+    dateColumnsUsed: [],
+    dateOrder: null,
+    dateRangeMin: null,
+    dateRangeMax: null,
+  };
 
   // Load learned category mappings for smart auto-categorization
   const learnedMappings = await loadLearnedMappings();
@@ -549,6 +768,29 @@ async function parseExcel(buffer) {
       // Tag each transaction with the sheet name as the account
       result.transactions.forEach(t => { t.account = sheetName; });
       allTransactions.push(...result.transactions);
+
+      // Aggregate parse stats
+      if (result.parseStats) {
+        const ps = result.parseStats;
+        aggregateParseStats.totalRows += ps.totalRows;
+        aggregateParseStats.validDates += ps.validDates;
+        aggregateParseStats.failedDates += ps.failedDates;
+        aggregateParseStats.failedDateRows.push(...ps.failedDateRows.map(r => ({ ...r, sheet: sheetName })));
+        aggregateParseStats.dateColumnsUsed.push({
+          sheet: sheetName,
+          column: ps.dateColumnUsed,
+          type: ps.dateColumnType,
+          allColumns: ps.allDateColumns,
+          dateOrder: ps.dateOrder,
+        });
+        if (!aggregateParseStats.dateOrder) aggregateParseStats.dateOrder = ps.dateOrder;
+        if (ps.dateRangeMin && (!aggregateParseStats.dateRangeMin || ps.dateRangeMin < aggregateParseStats.dateRangeMin)) {
+          aggregateParseStats.dateRangeMin = ps.dateRangeMin;
+        }
+        if (ps.dateRangeMax && (!aggregateParseStats.dateRangeMax || ps.dateRangeMax > aggregateParseStats.dateRangeMax)) {
+          aggregateParseStats.dateRangeMax = ps.dateRangeMax;
+        }
+      }
     } catch (e) {
       sheetErrors.push(`${sheetName}: ${e.message}`);
       continue;
@@ -563,7 +805,10 @@ async function parseExcel(buffer) {
   // Verify and fix orientation using balance column if available
   verifyAndFixOrientation(allTransactions);
 
-  return allTransactions;
+  // Cap failed date rows for response size
+  aggregateParseStats.failedDateRows = aggregateParseStats.failedDateRows.slice(0, 20);
+
+  return { transactions: allTransactions, parseStats: aggregateParseStats };
 }
 
 function generateAnalysis(transactions) {
@@ -750,7 +995,9 @@ export default async (req) => {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const transactions = await parseExcel(buffer);
+    const result = await parseExcel(buffer);
+    const transactions = result.transactions;
+    const parseStats = result.parseStats;
 
     if (transactions.length === 0) {
       return new Response(
@@ -766,6 +1013,7 @@ export default async (req) => {
         success: true,
         transactions,
         analysis,
+        parseStats,
       }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
