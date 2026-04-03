@@ -1015,6 +1015,8 @@ async function doUpload(file){
     }
     toast(summaryMsg);
     render();
+    // Persist uploaded data immediately so it survives page reload
+    saveTransactionsToBlobs();
     // Sync detected items to tracker immediately (using suggestedCategory for unconfirmed)
     syncTransactionsToHub();
     // Open review wizard for ALL transactions so user can approve suggestions
