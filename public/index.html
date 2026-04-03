@@ -689,7 +689,9 @@ function homeView(){
     var lm=latestMonth();
     if(!lm)return'';
     var today=new Date();
-    var currentDay=today.getDate();
+    var lmParts=(lm||latestMonth()||"").split("-");
+    var viewingCurrentMonth=lmParts.length===2&&parseInt(lmParts[0])===today.getFullYear()&&parseInt(lmParts[1])===(today.getMonth()+1);
+    var currentDay=viewingCurrentMonth?today.getDate():32;
     var monthTxns=mt;
     var existingDescs={};
     monthTxns.forEach(function(t){
@@ -1590,9 +1592,9 @@ function txnView(){
   html+='<div class="txn-filter-bar fi">';
   var filters=[
     {key:"all",label:"All ("+all.length+")"},
-    {key:"expense",label:"Expenses ("+all.filter(function(t){return t.type==="Expense"}).length+")"},
-    {key:"income",label:"Income ("+all.filter(function(t){return t.type==="Income"}).length+")"},
-    {key:"savings",label:"Savings ("+all.filter(function(t){return t.type==="Savings"}).length+")"}
+    {key:"expense",label:"Expenses ("+all.filter(function(t){var et=t.category==="Pending Review"&&t.suggestedType?t.suggestedType:t.type;return et==="Expense"}).length+")"},
+    {key:"income",label:"Income ("+all.filter(function(t){var et=t.category==="Pending Review"&&t.suggestedType?t.suggestedType:t.type;return et==="Income"}).length+")"},
+    {key:"savings",label:"Savings ("+all.filter(function(t){var et=t.category==="Pending Review"&&t.suggestedType?t.suggestedType:t.type;return et==="Savings"}).length+")"}
   ];
   if(uncatCount>0)filters.push({key:"uncategorized",label:"Uncategorized ("+uncatCount+")"});
   filters.forEach(function(ft){
@@ -1885,7 +1887,7 @@ function breakdownView(){
   for(var i=0;i<cats.length;i++){
     var c=cats[i];
     // Find individual transactions for this category
-    var catTxns=expenses().filter(function(t){return t.category===c.name});
+    var catTxns=expenses().filter(function(t){return t.category===c.name||(t.category==="Pending Review"&&t.suggestedCategory===c.name)});
     // Sort by date descending
     catTxns.sort(function(a,b){
       var pa=a.date.split("/"),pb=b.date.split("/");
@@ -2197,10 +2199,10 @@ function trackerView(){
       }
     }
     if(ps.dateOrder)lines.push('<strong>Date format detected:</strong> '+(ps.dateOrder==="day-first"?"Day-first (DD/MM/YYYY)":"Month-first (MM/DD/YYYY)"));
-    if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+ps.openingBalanceRow.description+')</span>':''));
-    if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+ps.closingBalanceRow.description+')</span>':''));
+    if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+escHtml(ps.openingBalanceRow.description)+')</span>':''));
+    if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+escHtml(ps.closingBalanceRow.description)+')</span>':''));
     if(ps.openingBalance!=null||ps.closingBalance!=null)lines.push('<strong>Balance source:</strong> '+ps.balanceSource);
-    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+r.description+'"'}).join(', '));
+    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+escHtml(r.description)+'"'}).join(', '));
     if(ps.summaryTotalsRowDetected){
       var sumLine='<strong>Totals summary row:</strong> <span style="color:var(--dim)">detected</span>';
       if(ps.summaryTotalPaidIn!=null)sumLine+=' &middot; Paid in: '+f(ps.summaryTotalPaidIn);
@@ -2912,6 +2914,8 @@ function parseDateFlex(s){
   // Try DD/MM/YYYY first
   var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if(m)return new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1]));
+  var m1b=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if(m1b){var yr=parseInt(m1b[3]);yr=yr<100?yr+2000:yr;return new Date(yr,parseInt(m1b[2])-1,parseInt(m1b[1]));}
   // Try YYYY-MM-DD
   var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(m2)return new Date(parseInt(m2[1]),parseInt(m2[2])-1,parseInt(m2[3]));
@@ -3631,6 +3635,12 @@ function renderBillCard(it){
 }
 
 function getBillStatus(bill){
+  if(bill.status==="paid")return"paid";
+  if(bill.dueDate){
+    var d=parseInt(bill.dueDate,10);
+    var today=new Date();
+    if(!isNaN(d)&&today.getDate()>d)return"overdue";
+  }
   return bill.status||"pending";
 }
 
