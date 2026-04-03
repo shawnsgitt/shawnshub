@@ -250,7 +250,7 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
 var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
-function f(n){if(n==null||isNaN(n))return"£0";return"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
+function f(n){if(n==null||isNaN(n))return"£0";var sign=n<0?"-":"";return sign+"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
 
 var D=null,charts={},cv="home",selAcct="all",selMonth=null;
@@ -353,9 +353,9 @@ function tot(a){return a.reduce(function(s,r){return s+txAmt(r)},0)}
 function render(){
   var a=document.getElementById("app");
   destroyCharts();
-  if(cv==="home")a.innerHTML=homeView();
+  if(cv==="home"){a.innerHTML=homeView();
     if(!hubCache["budget"])hubLoad("budget").then(function(){if(cv==="home"){a.innerHTML=homeView();initCharts();bindUpload();bindUncatClicks();bindAcctSelector();bindMonthSelector();bindTxnEvents();bindHubEvents();bindTrackerEvents();}});
-  else if(cv==="upload")a.innerHTML=uploadView();
+  }else if(cv==="upload")a.innerHTML=uploadView();
   else if(cv==="overview")a.innerHTML=dashboardView();
   else if(cv==="transactions")a.innerHTML=txnView();
   else if(cv==="more")a.innerHTML=moreView();
@@ -372,6 +372,7 @@ function render(){
 
 // ───────── HOME / FINANCIAL SNAPSHOT ─────────
 function latestBalance(acctName){
+  if(!D||!D.accounts||!D.accounts[acctName])return 0;
   var txns=D.accounts[acctName];
   if(!txns||!txns.length)return 0;
   var sorted=txns.slice().sort(function(a,b){
@@ -1349,7 +1350,7 @@ function showBatchModal(){
   bindBatchEvents(bg);
 }
 
-function escHtml(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function escHtml(s){return(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
 
 function bindBatchEvents(bg){
   // Search
@@ -2247,11 +2248,13 @@ function trackerView(){
   var billItems=((hubCache["bills"]||{items:[]}).items||[]).filter(function(i){return i.detectionStatus!=="detected"});
   var today=new Date();
   billItems.forEach(function(bill){
-    if(!bill.dueDay)return;
-    var dueDay=parseInt(bill.dueDay,10);
+    if(!bill.dueDate)return;
+    var dueDay=parseInt(bill.dueDate,10);
     if(isNaN(dueDay))return;
     if(today.getDate()>dueDay&&bill.status!=="paid"){
       alerts.push({type:"critical",text:escHtml(bill.name||bill.description||"A bill")+" was due on day "+dueDay+" and appears unpaid"});
+    }
+  });
   // Check for expected income not yet arrived (recurring patterns)
   var recurring=detectRecurringTransactions();
   var currentDay=today.getDate();
@@ -2332,8 +2335,6 @@ function trackerView(){
     });
     html+='</div>';
   }
-    }
-  });
 
   html+='<div class="hub-menu fi">';
   var menuItems=[
