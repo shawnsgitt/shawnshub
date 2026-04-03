@@ -1252,7 +1252,7 @@ function showBatchModal(){
   var items=isReviewMode?pendingReview():uncategorized();
   if(items.length===0){
     batchState.isReview=false;
-    recalcAnalysis();render();toast(isReviewMode?"All transactions reviewed!":"All transactions categorized!");return;
+    recalcAnalysis();render();saveTransactionsToBlobs();syncTransactionsToHub();toast(isReviewMode?"All transactions reviewed!":"All transactions categorized!");return;
   }
   // Recompute groups from current items
   batchState.groups=groupUncategorized(items);
@@ -1390,6 +1390,7 @@ function bindBatchEvents(bg){
         }
       });
       learnCategories(toLearn);
+      saveTransactionsToBlobs();
       toast(applied+" transactions approved!");
       showBatchModal();
     });
@@ -1437,6 +1438,7 @@ function bindBatchEvents(bg){
             toLearn.push({description:t.description,category:cat});
           });
           learnCategories(toLearn);
+          saveTransactionsToBlobs();
           toast(group.transactions.length+" categorized as "+cat);
           showBatchModal();
         }
@@ -1464,6 +1466,7 @@ function bindBatchEvents(bg){
       }
     });
     learnCategories(toLearn);
+    saveTransactionsToBlobs();
     // Clear selection for applied groups
     Object.keys(batchState.selected).forEach(function(k){
       if(batchState.selected[k])delete batchState.selected[k];
@@ -1718,6 +1721,7 @@ function openCategoryModal(txn){
       bg.remove();
       recalcAnalysis();
       render();
+      saveTransactionsToBlobs();
       toast("Categorized as "+cat);
     });
   });
