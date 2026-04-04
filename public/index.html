@@ -360,6 +360,7 @@ function render(){
   else if(cv==="transactions")a.innerHTML=txnView();
   else if(cv==="more")a.innerHTML=moreView();
   else if(cv==="tracker")a.innerHTML=trackerView();
+  else if(cv==="insights")a.innerHTML=insightsView();
   initCharts();
   bindUpload();
   bindUncatClicks();
@@ -921,7 +922,7 @@ function uploadSummary(){
     '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:var(--muted)">Categorisation status</span><span style="font-size:12px"><span style="color:var(--green)">'+catConfirmed+' confirmed</span> &middot; <span style="color:var(--amber)">'+catPending+' pending</span>'+(catUncategorized>0?' &middot; <span style="color:var(--dim)">'+catUncategorized+' uncategorised</span>':'')+'</span></div>'+
   '</div>'+
   (needsReview>0?'<div class="uncat-banner fi" id="reviewBanner"><h3>'+needsReview+' transaction'+(needsReview!==1?'s':'')+' need'+(needsReview===1?'s':'')+' review</h3><p>Tap here to review and approve suggested categories</p></div>':'')+
-  '<div style="text-align:center;padding:10px 0"><p style="font-size:12px;color:var(--dim)">Navigate to Dashboard, Breakdown, or Insights tabs to explore your analysis</p></div>';
+  '<div style="text-align:center;padding:10px 0"><p style="font-size:12px;color:var(--dim)">Navigate to Dashboard, Breakdown, or <span style="color:var(--purple);cursor:pointer;text-decoration:underline" onclick="cv=\'insights\';document.querySelectorAll(\'.ni\').forEach(function(e){e.classList.remove(\'on\')});destroyCharts();render()">Insights</span> to explore your analysis</p></div>';
 }
 
 function bindUpload(){
@@ -938,6 +939,7 @@ function bindUpload(){
   var clearBtn=document.getElementById("clearData");
   if(clearBtn)clearBtn.addEventListener("click",function(){
     D=null;selMonth=null;hubCache={};render();toast("Analysis cleared");
+    fetch("/api/hub-data?collection=uploaded-transactions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"set",data:{items:[],analysis:{},parseStats:null,netWorthHistory:[],savedAt:new Date().toISOString()}})}).catch(function(){});
   });
 
   var reviewBanner=document.getElementById("reviewBanner");
@@ -1709,7 +1711,7 @@ function openCategoryModal(txn){
   bg.className="modal-bg";
   bg.innerHTML='<div class="modal">'+
     '<h3>Change Category</h3>'+
-    '<div class="modal-sub">'+escHtml(txn.description)+'<br><strong style="color:var(--red)">-'+f(txAmt(txn))+'</strong> &middot; '+txn.date+'<br>Current: <span style="color:var(--purple)">'+txn.category+'</span></div>'+
+    '<div class="modal-sub">'+escHtml(txn.description)+'<br><strong style="color:var(--red)">-'+f(txAmt(txn))+'</strong> &middot; '+txn.date+'<br>Current: <span style="color:var(--purple)">'+escHtml(txn.category)+'</span></div>'+
     CATS.filter(function(c){return c!=="Uncategorized"}).map(function(c){
       return '<div class="cat-opt" data-cat="'+c+'"><div class="dot" style="background:'+cc(c)+'"></div><span>'+c+'</span>'+(txn.category===c?' <span style="margin-left:auto;font-size:11px;color:var(--purple)">&#10003; current</span>':'')+'</div>';
     }).join("")+
@@ -1985,7 +1987,8 @@ function insightsView(){
     var icons={critical:"!!",warning:"!",suggestion:"?",positive:"&#10003;",info:"i"};
     for(var i=0;i<recs.length;i++){
       var r=recs[i];
-      html+='<div class="rec-card"><div class="rec-icon '+r.type+'">'+icons[r.type]+'</div><div class="rec-body"><h4>'+r.title+'</h4><p>'+r.detail+'</p></div></div>';
+      var safeType=["critical","warning","suggestion","positive","info"].indexOf(r.type)>=0?r.type:"info";
+      html+='<div class="rec-card"><div class="rec-icon '+safeType+'">'+icons[safeType]+'</div><div class="rec-body"><h4>'+escHtml(r.title)+'</h4><p>'+escHtml(r.detail)+'</p></div></div>';
     }
     html+='</div>';
   }
@@ -1998,11 +2001,11 @@ function insightsView(){
       var t=biggest[j];
       html+='<div class="row"><div class="dot" style="background:'+cc(t.category)+'"></div><div style="flex:1">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
-          '<span class="rname" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%">'+t.description+'</span>'+
+          '<span class="rname" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%">'+escHtml(t.description)+'</span>'+
           '<span class="ramt" style="color:var(--red)">-'+f(txAmt(t))+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:6px;align-items:center;margin-top:3px">'+
-          '<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:var(--s2);color:var(--dim)">'+t.category+'</span>'+
+          '<span style="font-size:10px;padding:2px 7px;border-radius:5px;background:var(--s2);color:var(--dim)">'+escHtml(t.category)+'</span>'+
           '<span style="font-size:10px;color:var(--dim);margin-left:auto">'+t.date+'</span>'+
         '</div>'+
       '</div></div>';
@@ -2200,7 +2203,7 @@ function trackerView(){
     var lmNow=latestMonth();
     if(lmNow)lines.push('<strong>Viewing month:</strong> '+monthName(lmNow.m)+' '+lmNow.y+' ('+monthlyTxns().length+' transaction'+(monthlyTxns().length!==1?'s':'')+')');
     if(ps.dateColumnsUsed&&ps.dateColumnsUsed.length>0){
-      var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+c.column+'" ('+c.type+') in '+c.sheet}).join(', ');
+      var colInfo=ps.dateColumnsUsed.map(function(c){return '"'+escHtml(c.column)+'" ('+escHtml(c.type)+') in '+escHtml(c.sheet)}).join(', ');
       lines.push('<strong>Date column used:</strong> '+colInfo);
       if(ps.dateColumnsUsed[0].allColumns&&ps.dateColumnsUsed[0].allColumns.length>1){
         lines.push('<strong>Other date columns found:</strong> '+ps.dateColumnsUsed[0].allColumns.slice(1).join(', '));
@@ -2210,7 +2213,7 @@ function trackerView(){
     if(ps.openingBalance!=null)lines.push('<strong>Opening balance detected:</strong> <span style="color:var(--green)">'+f(ps.openingBalance)+'</span>'+(ps.openingBalanceRow?' <span style="color:var(--dim)">('+escHtml(ps.openingBalanceRow.description)+')</span>':''));
     if(ps.closingBalance!=null)lines.push('<strong>Closing balance detected:</strong> <span style="color:var(--green)">'+f(ps.closingBalance)+'</span>'+(ps.closingBalanceRow?' <span style="color:var(--dim)">('+escHtml(ps.closingBalanceRow.description)+')</span>':''));
     if(ps.openingBalance!=null||ps.closingBalance!=null)lines.push('<strong>Balance source:</strong> '+ps.balanceSource);
-    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return r.type+' &mdash; "'+escHtml(r.description)+'"'}).join(', '));
+    if(ps.balanceRows&&ps.balanceRows.length>0)lines.push('<strong>Balance rows classified:</strong> '+ps.balanceRows.map(function(r){return escHtml(r.type)+' &mdash; "'+escHtml(r.description)+'"'}).join(', '));
     if(ps.summaryTotalsRowDetected){
       var sumLine='<strong>Totals summary row:</strong> <span style="color:var(--dim)">detected</span>';
       if(ps.summaryTotalPaidIn!=null)sumLine+=' &middot; Paid in: '+f(ps.summaryTotalPaidIn);
@@ -2218,7 +2221,7 @@ function trackerView(){
       lines.push(sumLine);
     }
     if(failedCount>0&&ps.failedDateRows&&ps.failedDateRows.length>0){
-      var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+r.rawValue+'"'+(r.sheet?' ('+r.sheet+')':'')}).join(', ');
+      var examples=ps.failedDateRows.slice(0,5).map(function(r){return 'Row '+r.row+': "'+escHtml(r.rawValue)+'"'+(r.sheet?' ('+escHtml(r.sheet)+')':'')}).join(', ');
       lines.push('<strong>Unreadable date examples:</strong> '+examples);
     }
     return'<div class="fi" style="animation-delay:.02s;background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:14px;font-size:12px;line-height:1.8">'+
@@ -4006,8 +4009,11 @@ function inferFrequency(dates){
   return"Yearly";
 }
 
+var _syncLock=false;
 async function syncTransactionsToHub(){
-  if(!D||!D.transactions)return;
+  if(_syncLock)return;_syncLock=true;
+  try{
+  if(!D||!D.transactions){_syncLock=false;return;}
   var confirmed=D.transactions.filter(function(t){return t.confirmed!==false});
 
   // Extract unique recurring bills from "Bills & Utilities" transactions
@@ -4212,6 +4218,7 @@ async function syncTransactionsToHub(){
   try{
     await Promise.all([hubLoad("bills"),hubLoad("subscriptions"),hubLoad("income"),hubLoad("budget")]);
   }catch(e){/* silent */}
+  }finally{_syncLock=false;}
 }
 
 // ───────── INIT ─────────
