@@ -251,7 +251,7 @@ var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills
 var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){if(n==null||isNaN(n))return"£0";var sign=n<0?"-":"";return sign+"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
-function txAmt(t){return t.absAmount||Math.abs(t.amount||0)||0}
+function txAmt(t){return t.absAmount!=null?t.absAmount:Math.abs(t.amount||0)}
 
 var D=null,charts={},cv="home",selAcct="all",selMonth=null;
 var hubSection=null; // tracks which "more" sub-section is active
@@ -689,8 +689,7 @@ function homeView(){
     var lm=latestMonth();
     if(!lm)return'';
     var today=new Date();
-    var lmParts=(lm||latestMonth()||"").split("-");
-    var viewingCurrentMonth=lmParts.length===2&&parseInt(lmParts[0])===today.getFullYear()&&parseInt(lmParts[1])===(today.getMonth()+1);
+    var viewingCurrentMonth=lm.y===today.getFullYear()&&lm.m===(today.getMonth()+1);
     var currentDay=viewingCurrentMonth?today.getDate():32;
     var monthTxns=mt;
     var existingDescs={};
@@ -938,7 +937,7 @@ function bindUpload(){
 
   var clearBtn=document.getElementById("clearData");
   if(clearBtn)clearBtn.addEventListener("click",function(){
-    D=null;selMonth=null;render();toast("Analysis cleared");
+    D=null;selMonth=null;hubCache={};render();toast("Analysis cleared");
   });
 
   var reviewBanner=document.getElementById("reviewBanner");
@@ -1210,7 +1209,7 @@ function openUncatWizard(){
 // Review wizard for ALL pending transactions after upload
 function pendingReview(){
   if(!D||!D.transactions)return[];
-  return D.transactions.filter(function(t){return t.confirmed===false||t.category==="Pending Review"});
+  return D.transactions.filter(function(t){return t.confirmed===false&&t.category==="Pending Review"});
 }
 
 function openReviewWizard(){
@@ -1526,6 +1525,7 @@ function recalcAnalysis(){
   D.analysis.totalExpenses=Math.round(totalExpenses*100)/100;
   D.analysis.totalSavings=Math.round(totalSavings*100)/100;
   D.analysis.net=Math.round((totalIncome-totalExpenses-totalSavings)*100)/100;
+  D.analysis.transactionCount=D.transactions.length;
 
   // Recalc category breakdown — use effective category
   var catMap={};
@@ -1559,9 +1559,10 @@ function txnView(){
 
   // Apply filters
   var txns=all.filter(function(t){
-    if(filterType==="expense"&&t.type!=="Expense")return false;
-    if(filterType==="income"&&t.type!=="Income")return false;
-    if(filterType==="savings"&&t.type!=="Savings")return false;
+    var et=t.type;if(t.category==="Pending Review"&&t.suggestedType)et=t.suggestedType;
+    if(filterType==="expense"&&et!=="Expense")return false;
+    if(filterType==="income"&&et!=="Income")return false;
+    if(filterType==="savings"&&et!=="Savings")return false;
     if(filterType==="uncategorized"&&(t.category!=="Uncategorized"||t.type==="Non-Transactional"))return false;
     if(search&&t.description.toLowerCase().indexOf(search)===-1&&t.category.toLowerCase().indexOf(search)===-1&&t.date.indexOf(search)===-1)return false;
     return true;
@@ -1569,15 +1570,18 @@ function txnView(){
 
   // Sort by date descending
   txns=txns.slice().sort(function(a,b){
+    if(a.dateUnreadable||a.date==="UNREADABLE")return 1;
+    if(b.dateUnreadable||b.date==="UNREADABLE")return -1;
     var pa=a.date.split("/"),pb=b.date.split("/");
     var da=new Date(pa[2],pa[1]-1,pa[0]),db=new Date(pb[2],pb[1]-1,pb[0]);
     return db-da;
   });
 
   var total=txns.length;
+  var totalPages=Math.ceil(total/txnState.pageSize);
+  if(txnState.page>=totalPages)txnState.page=Math.max(0,totalPages-1);
   var start=txnState.page*txnState.pageSize;
   var paged=txns.slice(start,start+txnState.pageSize);
-  var totalPages=Math.ceil(total/txnState.pageSize);
 
   var uncatCount=uncategorized().length;
 
@@ -1949,11 +1953,15 @@ function insightsView(){
   '</div>';
 
   // Key stats
+  var allDates=expenses().map(function(t){if(t.dateUnreadable)return null;var p=t.date.split("/");return new Date(p[2],p[1]-1,p[0])}).filter(Boolean);
+  var daySpan=1;
+  if(allDates.length>1){var mn=Math.min.apply(null,allDates),mx=Math.max.apply(null,allDates);daySpan=Math.max(1,Math.round((mx-mn)/86400000)+1);}
+  var weekSpan=Math.max(1,daySpan/7);
   html+='<div class="sec fi" style="animation-delay:.05s"><div class="stitle">Key Numbers</div>'+
     '<div class="kgrid">'+
-      '<div class="k b"><div class="l">Daily Spend</div><div class="v">'+f(ts/30)+'</div><div class="sub">avg per day</div></div>'+
+      '<div class="k b"><div class="l">Daily Spend</div><div class="v">'+f(ts/daySpan)+'</div><div class="sub">avg per day</div></div>'+
       '<div class="k a"><div class="l">Per Transaction</div><div class="v">'+f(expenses().length>0?ts/expenses().length:0)+'</div><div class="sub">avg expense</div></div>'+
-      '<div class="k g"><div class="l">Weekly Surplus</div><div class="v">'+f((ti-ts)/4)+'</div><div class="sub">avg per week</div></div>'+
+      '<div class="k g"><div class="l">Weekly Surplus</div><div class="v">'+f((ti-ts)/weekSpan)+'</div><div class="sub">avg per week</div></div>'+
       '<div class="k p"><div class="l">Categories</div><div class="v">'+a.categoryBreakdown.length+'</div><div class="sub">expense types</div></div>'+
     '</div>'+
   '</div>';
@@ -2810,7 +2818,7 @@ function moreView(){
 
   // Show synced data status if transactions are loaded
   if(hasData()){
-    var confirmed=D.transactions.filter(function(t){return t.confirmed!==false}).length;
+    var confirmed=D.transactions.filter(function(t){return t.confirmed===true}).length;
     var total=D.transactions.length;
     var pending=total-confirmed;
     if(pending>0){
@@ -3088,7 +3096,7 @@ function budgetView(){
     if(it.budgetType==="income")totalExpected+=parseFloat(it.planned||0);
     else{totalPlanned+=parseFloat(it.planned||0);totalActual+=parseFloat(it.actual||0)}
   });
-  var diff=totalExpected-totalActual;
+  var diff=totalPlanned-totalActual;
 
   // Show auto-sync info
   var uploadLines=items.filter(function(i){return i.source==="upload"});
@@ -3924,8 +3932,8 @@ function recordNetWorthSnapshot(){
     cashTotal=D.parseStats.closingBalance;
   }
   if(nw===0&&cashTotal===0&&debtTotal===0)return;
-  var now=new Date();
-  var key=now.getFullYear()+"-"+(now.getMonth()+1<10?"0":"")+(now.getMonth()+1);
+  var lm=latestMonth();
+  var key=lm.y+"-"+(lm.m<10?"0":"")+lm.m;
   if(!D.netWorthHistory)D.netWorthHistory=[];
   var found=false;
   for(var i=0;i<D.netWorthHistory.length;i++){
@@ -4173,7 +4181,7 @@ async function syncTransactionsToHub(){
 
     // Build category totals from confirmed expenses
     var catTotals={};
-    confirmed.filter(function(t){return t.type==="Expense"}).forEach(function(t){
+    confirmed.filter(function(t){if(t.type!=="Expense")return false;if(!t.date||t.dateUnreadable)return false;var p=t.date.split("/");var txMonth=p[2]+"-"+(p[1].length===1?"0":"")+p[1];return txMonth===curMonth;}).forEach(function(t){
       if(!catTotals[t.category])catTotals[t.category]=0;
       catTotals[t.category]+=txAmt(t);
     });
