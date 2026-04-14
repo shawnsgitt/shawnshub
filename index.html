@@ -11,6 +11,8 @@
 <link rel="manifest" href="/manifest.json">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";}</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0a0f1a;--s1:#111827;--s2:#1a2235;--card:#1e293b;--border:#2d3a52;--text:#f1f5f9;--muted:#94a3b8;--dim:#64748b;--green:#22c55e;--gbg:rgba(34,197,94,.1);--red:#ef4444;--rbg:rgba(239,68,68,.1);--purple:#a855f7;--pbg:rgba(168,85,247,.1);--amber:#f59e0b;--abg:rgba(245,158,11,.1);--blue:#3b82f6;--teal:#14b8a6;--coral:#f97316;--pink:#ec4899;--cyan:#06b6d4}
@@ -971,8 +973,8 @@ function uploadView(){
   '<div class="upload-zone fi" id="dropZone">'+
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'+
     '<p>'+(hasData()?'Upload another file to re-analyze':'Tap to upload or drag your bank statement')+'</p>'+
-    '<div class="hint">Excel or CSV files (.xlsx, .xls, .csv) — analysis only, nothing is stored</div>'+
-    '<input type="file" id="fileInput" accept=".xlsx,.xls,.csv">'+
+    '<div class="hint">Excel, CSV or PDF files (.xlsx, .xls, .csv, .pdf) — analysis only, nothing is stored</div>'+
+    '<input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.pdf,application/pdf">'+
   '</div>'+
   (hasData()?uploadSummary():
   '<div class="empty fi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><h2>Analyze your spending</h2><p>Upload your bank statement Excel file to get instant spending analysis, category breakdowns, and personalized recommendations. Your data is analyzed in real-time and never stored.</p></div>');
@@ -1034,16 +1036,129 @@ function bindUpload(){
   });
 }
 
+async function parsePdfStatement(file){
+  if(!window.pdfjsLib)throw new Error("PDF reader not available — please check your connection and retry");
+  var ab=await file.arrayBuffer();
+  var pdf=await pdfjsLib.getDocument({data:ab}).promise;
+  var lines=[];
+  for(var p=1;p<=pdf.numPages;p++){
+    var page=await pdf.getPage(p);
+    var content=await page.getTextContent();
+    var buckets={};
+    content.items.forEach(function(it){
+      if(!it.str||!it.str.trim())return;
+      var y=Math.round(it.transform[5]);
+      // Bucket nearby y-values (within 3pt) together
+      var key=null;
+      for(var k in buckets){if(Math.abs(parseFloat(k)-y)<=3){key=k;break}}
+      if(key===null){key=String(y);buckets[key]=[]}
+      buckets[key].push({x:it.transform[4],text:it.str});
+    });
+    Object.keys(buckets).sort(function(a,b){return parseFloat(b)-parseFloat(a)}).forEach(function(k){
+      var items=buckets[k].sort(function(a,b){return a.x-b.x});
+      var line=items.map(function(i){return i.text}).join(" ").replace(/\s+/g," ").trim();
+      if(line)lines.push({text:line,items:items});
+    });
+  }
+  // Detect Paid In / Paid Out column x-positions from header rows, if present
+  var paidOutX=null,paidInX=null,amountX=null,balanceX=null;
+  for(var li=0;li<lines.length;li++){
+    var items=lines[li].items;
+    for(var ii=0;ii<items.length-1;ii++){
+      var combo=(items[ii].text+" "+items[ii+1].text).toLowerCase();
+      if(/paid\s*out|money\s*out|withdrawals?|debit/.test(combo)&&paidOutX===null)paidOutX=items[ii].x;
+      if(/paid\s*in|money\s*in|deposits?|credit/.test(combo)&&paidInX===null)paidInX=items[ii].x;
+    }
+    var lower=lines[li].text.toLowerCase();
+    if(/\bamount\b/.test(lower)&&amountX===null){
+      var it2=items.find(function(i){return /amount/i.test(i.text)});if(it2)amountX=it2.x;
+    }
+    if(/\bbalance\b/.test(lower)&&balanceX===null){
+      var it3=items.find(function(i){return /balance/i.test(i.text)});if(it3)balanceX=it3.x;
+    }
+  }
+  var dateRe=/\b(\d{1,2})[\/\- ](\d{1,2}|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\/\- ](\d{2,4})\b/i;
+  var amountRe=/-?\d{1,3}(?:,\d{3})*\.\d{2}/g;
+  var txs=[];
+  var prevBalance=null;
+  lines.forEach(function(ln){
+    var m=ln.text.match(dateRe);
+    if(!m)return;
+    var amounts=ln.text.match(amountRe);
+    if(!amounts||amounts.length===0)return;
+    // Find x-positions of each amount item on this line
+    var amountItems=ln.items.filter(function(i){return /-?\d{1,3}(?:,\d{3})*\.\d{2}/.test(i.text)});
+    var nums=amounts.map(function(a){return parseFloat(a.replace(/,/g,""))});
+    var amount=null,balance=null,signed=null;
+    // Try column-based attribution first
+    if((paidOutX!==null||paidInX!==null)&&amountItems.length){
+      amountItems.forEach(function(ai){
+        var v=parseFloat(ai.text.replace(/,/g,""));
+        if(isNaN(v))return;
+        if(paidOutX!==null&&Math.abs(ai.x-paidOutX)<40){signed=-Math.abs(v);amount=v}
+        else if(paidInX!==null&&Math.abs(ai.x-paidInX)<40){signed=Math.abs(v);amount=v}
+        else if(balanceX!==null&&Math.abs(ai.x-balanceX)<40){balance=v}
+      });
+    }
+    if(signed===null){
+      if(nums.length>=2){amount=nums[nums.length-2];balance=nums[nums.length-1]}
+      else amount=nums[0];
+      // Infer sign via running-balance delta when possible
+      if(balance!==null&&prevBalance!==null){
+        signed=(balance>prevBalance)?Math.abs(amount):-Math.abs(amount);
+      }else{
+        signed=-Math.abs(amount); // conservative default: expense
+      }
+    }
+    if(balance!==null)prevBalance=balance;
+    var desc=ln.text.replace(m[0],"");
+    amounts.forEach(function(a){desc=desc.split(a).join(" ")});
+    desc=desc.replace(/\s+/g," ").trim();
+    if(!desc&&!amount)return;
+    var parsedDate=parseDateLocal(m[0]);
+    txs.push({
+      date:parsedDate||m[0],
+      description:desc,
+      amount:signed,
+      absAmount:Math.abs(signed),
+      type:signed>0?"Income":"Expense",
+      category:categorizeTransaction(desc,signed),
+      suggestedCategory:categorizeTransaction(desc,signed),
+      suggestedType:signed>0?"Income":"Expense",
+      confirmed:false,
+      account:file.name,
+      sheet:file.name
+    });
+  });
+  if(txs.length===0)throw new Error("No transactions found in PDF — the file may be scanned (image-only) or use an unsupported layout");
+  var totalIncome=0,totalExpenses=0,catMap={};
+  txs.forEach(function(t){
+    if(t.type==="Income")totalIncome+=t.absAmount;else totalExpenses+=t.absAmount;
+    if(t.type==="Expense"){var c=t.suggestedCategory||"Uncategorized";if(!catMap[c])catMap[c]={total:0,count:0};catMap[c].total+=t.absAmount;catMap[c].count++}
+  });
+  return{
+    transactions:txs,
+    analysis:{
+      transactionCount:txs.length,
+      totalIncome:Math.round(totalIncome*100)/100,
+      totalExpenses:Math.round(totalExpenses*100)/100,
+      net:Math.round((totalIncome-totalExpenses)*100)/100,
+      categoryBreakdown:Object.entries(catMap).map(function(e){return{name:e[0],total:Math.round(e[1].total*100)/100,count:e[1].count,percentage:totalExpenses>0?Math.round(e[1].total/totalExpenses*1000)/10:0}}).sort(function(a,b){return b.total-a.total}),
+      recommendations:[]
+    }
+  };
+}
+
 async function doUpload(file){
   var ext=file.name.toLowerCase().split('.').pop();
-  if(ext!=="xlsx"&&ext!=="xls"&&ext!=="csv"){toast("Please upload an Excel or CSV file (.xlsx, .xls, or .csv)",true);return}
+  if(ext!=="xlsx"&&ext!=="xls"&&ext!=="csv"&&ext!=="pdf"){toast("Please upload an Excel, CSV or PDF file (.xlsx, .xls, .csv, .pdf)",true);return}
 
   var zone=document.getElementById("dropZone");
   zone.innerHTML='<div style="width:28px;height:28px;border:2.5px solid var(--border);border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto 12px"></div><p>Analyzing your statement...</p><div class="hint">Reading columns, categorizing transactions, generating insights</div>';
 
   try{
-    // Client-side Excel/CSV parsing using SheetJS
-    var data = await new Promise(function(resolve, reject) {
+    // Client-side Excel/CSV/PDF parsing
+    var data = ext==="pdf" ? await parsePdfStatement(file) : await new Promise(function(resolve, reject) {
       var reader = new FileReader();
       reader.onerror = function() { reject(new Error("Failed to read file")); };
       reader.onload = function(e) {
@@ -1061,7 +1176,49 @@ async function doUpload(file){
               var hasAmount = row.some(function(c) { return /amount|debit|credit|value|paid\s*in|paid\s*out|money\s*in|money\s*out|withdrawal|deposit|balance/i.test(String(c)); });
               if (hasDate && hasAmount) { headerIdx = ri; break; }
             }
-            if (headerIdx === -1) return;
+            if (headerIdx === -1) {
+              // Fallback: no clear header row — scan for lines that look like transactions
+              // (a cell parseable as a date and at least one numeric cell)
+              var dateReFB = /^\s*\d{1,2}[\/\-\. ]\d{1,2}[\/\-\. ]\d{2,4}\s*$|^\s*\d{4}-\d{2}-\d{2}/;
+              rows.forEach(function(r){
+                if(!r||!r.length)return;
+                var dateCell=null,dateIdx=-1;
+                for(var ci=0;ci<r.length;ci++){
+                  var cv=r[ci];
+                  if(cv instanceof Date){dateCell=cv.getDate()+"/"+(cv.getMonth()+1)+"/"+cv.getFullYear();dateIdx=ci;break}
+                  if(typeof cv==="string"&&dateReFB.test(cv)){dateCell=cv.trim();dateIdx=ci;break}
+                }
+                if(!dateCell)return;
+                var nums=[],descParts=[];
+                for(var cj=0;cj<r.length;cj++){
+                  if(cj===dateIdx)continue;
+                  var cv2=r[cj];
+                  if(cv2===""||cv2==null)continue;
+                  var n=parseFloat(String(cv2).replace(/[^0-9.\-]/g,""));
+                  if(!isNaN(n)&&/[\d]/.test(String(cv2)))nums.push({v:n,i:cj});
+                  else descParts.push(String(cv2).trim());
+                }
+                if(!nums.length)return;
+                var amountN=nums.length>=2?nums[nums.length-2].v:nums[0].v;
+                var desc=descParts.join(" ").trim();
+                if(!desc&&amountN===0)return;
+                var parsedDate=parseDateLocal(dateCell);
+                allRows.push({
+                  date:parsedDate||dateCell,
+                  description:desc,
+                  amount:amountN,
+                  absAmount:Math.abs(amountN),
+                  type:amountN>0?"Income":"Expense",
+                  category:categorizeTransaction(desc,amountN),
+                  suggestedCategory:categorizeTransaction(desc,amountN),
+                  suggestedType:amountN>0?"Income":"Expense",
+                  confirmed:false,
+                  account:name,
+                  sheet:name
+                });
+              });
+              return;
+            }
             var headers = rows[headerIdx].map(function(h) { return String(h).trim().toLowerCase(); });
             var dateCol = headers.findIndex(function(h) { return /date/i.test(h); });
             var descCol = headers.findIndex(function(h) { return /description|narrative|details|reference|particulars/i.test(h); });
