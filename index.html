@@ -1127,7 +1127,8 @@ async function parsePdfStatement(file){
       suggestedType:signed>0?"Income":"Expense",
       confirmed:false,
       account:file.name,
-      sheet:file.name
+      sheet:file.name,
+      balance:balance
     });
   });
   if(txs.length===0)throw new Error("No transactions found in PDF — the file may be scanned (image-only) or use an unsupported layout");
@@ -1200,6 +1201,7 @@ async function doUpload(file){
                 }
                 if(!nums.length)return;
                 var amountN=nums.length>=2?nums[nums.length-2].v:nums[0].v;
+                var balN=nums.length>=2?nums[nums.length-1].v:null;
                 var desc=descParts.join(" ").trim();
                 if(!desc&&amountN===0)return;
                 var parsedDate=parseDateLocal(dateCell);
@@ -1214,7 +1216,8 @@ async function doUpload(file){
                   suggestedType:amountN>0?"Income":"Expense",
                   confirmed:false,
                   account:name,
-                  sheet:name
+                  sheet:name,
+                  balance:balN
                 });
               });
               return;
@@ -1225,6 +1228,7 @@ async function doUpload(file){
             var amountCol = headers.findIndex(function(h) { return /^amount$/i.test(h); });
             var debitCol = headers.findIndex(function(h) { return /debit|paid\s*out|money\s*out|withdrawal/i.test(h); });
             var creditCol = headers.findIndex(function(h) { return /credit|paid\s*in|money\s*in|deposit/i.test(h); });
+            var balanceCol = headers.findIndex(function(h) { return /balance|running\s*total/i.test(h); });
             if (descCol === -1) descCol = headers.findIndex(function(h) { return h && h !== headers[dateCol] && !/amount|debit|credit|balance/i.test(h); });
             for (var i = headerIdx + 1; i < rows.length; i++) {
               var r = rows[i];
@@ -1246,6 +1250,11 @@ async function doUpload(file){
               }
               if (!desc && amount === 0) continue;
               var parsedDate = parseDateLocal(dateStr);
+              var balVal = null;
+              if (balanceCol >= 0 && r[balanceCol] !== "" && r[balanceCol] != null) {
+                var bn = parseFloat(String(r[balanceCol]).replace(/[^0-9.\-]/g, ""));
+                if (!isNaN(bn)) balVal = bn;
+              }
               allRows.push({
                 date: parsedDate || dateStr,
                 description: desc,
@@ -1257,7 +1266,8 @@ async function doUpload(file){
                 suggestedType: amount > 0 ? "Income" : "Expense",
                 confirmed: false,
                 account: name,
-                sheet: name
+                sheet: name,
+                balance: balVal
               });
             }
           });
