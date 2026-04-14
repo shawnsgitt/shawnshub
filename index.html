@@ -1058,7 +1058,7 @@ async function doUpload(file){
             for (var ri = 0; ri < Math.min(rows.length, 10); ri++) {
               var row = rows[ri];
               var hasDate = row.some(function(c) { return /date/i.test(String(c)); });
-              var hasAmount = row.some(function(c) { return /amount|debit|credit|value/i.test(String(c)); });
+              var hasAmount = row.some(function(c) { return /amount|debit|credit|value|paid\s*in|paid\s*out|money\s*in|money\s*out|withdrawal|deposit|balance/i.test(String(c)); });
               if (hasDate && hasAmount) { headerIdx = ri; break; }
             }
             if (headerIdx === -1) return;
@@ -1066,8 +1066,8 @@ async function doUpload(file){
             var dateCol = headers.findIndex(function(h) { return /date/i.test(h); });
             var descCol = headers.findIndex(function(h) { return /description|narrative|details|reference|particulars/i.test(h); });
             var amountCol = headers.findIndex(function(h) { return /^amount$/i.test(h); });
-            var debitCol = headers.findIndex(function(h) { return /debit/i.test(h); });
-            var creditCol = headers.findIndex(function(h) { return /credit/i.test(h); });
+            var debitCol = headers.findIndex(function(h) { return /debit|paid\s*out|money\s*out|withdrawal/i.test(h); });
+            var creditCol = headers.findIndex(function(h) { return /credit|paid\s*in|money\s*in|deposit/i.test(h); });
             if (descCol === -1) descCol = headers.findIndex(function(h) { return h && h !== headers[dateCol] && !/amount|debit|credit|balance/i.test(h); });
             for (var i = headerIdx + 1; i < rows.length; i++) {
               var r = rows[i];
