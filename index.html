@@ -1167,6 +1167,7 @@ async function doUpload(file){
           var ab = e.target.result;
           var wb = XLSX.read(ab, {type: "array", cellDates: true});
           var allRows = [];
+          var sheetStats = [];
           wb.SheetNames.forEach(function(name) {
             var ws = wb.Sheets[name];
             var rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: ""});
@@ -1230,31 +1231,59 @@ async function doUpload(file){
             var creditCol = headers.findIndex(function(h) { return /credit|paid\s*in|money\s*in|deposit/i.test(h); });
             var balanceCol = headers.findIndex(function(h) { return /balance|running\s*total/i.test(h); });
             if (descCol === -1) descCol = headers.findIndex(function(h) { return h && h !== headers[dateCol] && !/amount|debit|credit|balance/i.test(h); });
+            var runningBalance = null, openingBalance = null, closingBalance = null;
             for (var i = headerIdx + 1; i < rows.length; i++) {
               var r = rows[i];
               if (!r || !r[dateCol]) continue;
+              // Skip summary / totals rows (no date)
+              var firstCell = String(r[0] || "").toLowerCase();
+              if (/^totals?\b|^summary\b/.test(firstCell)) continue;
               var dateStr = String(r[dateCol]).trim();
-              // Handle Date objects from cellDates:true
               if (r[dateCol] instanceof Date) {
                 var dd = r[dateCol];
                 dateStr = dd.getDate() + "/" + (dd.getMonth() + 1) + "/" + dd.getFullYear();
               }
               var desc = descCol >= 0 ? String(r[descCol] || "").trim() : "";
               var amount = 0;
+              var debit = 0, credit = 0;
               if (amountCol >= 0) {
                 amount = parseFloat(String(r[amountCol]).replace(/[^0-9.\-]/g, "")) || 0;
               } else {
-                var debit = debitCol >= 0 ? parseFloat(String(r[debitCol]).replace(/[^0-9.\-]/g, "")) || 0 : 0;
-                var credit = creditCol >= 0 ? parseFloat(String(r[creditCol]).replace(/[^0-9.\-]/g, "")) || 0 : 0;
+                debit = debitCol >= 0 ? parseFloat(String(r[debitCol]).replace(/[^0-9.\-]/g, "")) || 0 : 0;
+                credit = creditCol >= 0 ? parseFloat(String(r[creditCol]).replace(/[^0-9.\-]/g, "")) || 0 : 0;
                 amount = credit > 0 ? credit : -debit;
               }
-              if (!desc && amount === 0) continue;
-              var parsedDate = parseDateLocal(dateStr);
               var balVal = null;
               if (balanceCol >= 0 && r[balanceCol] !== "" && r[balanceCol] != null) {
                 var bn = parseFloat(String(r[balanceCol]).replace(/[^0-9.\-]/g, ""));
                 if (!isNaN(bn)) balVal = bn;
               }
+              // Detect opening / closing balance rows and DO NOT push them as transactions
+              var descLow = desc.toLowerCase();
+              var typeCell = "";
+              for (var tci = 0; tci < r.length; tci++) {
+                var tv = String(r[tci] || "").toLowerCase();
+                if (tv === "opening" || tv === "closing") { typeCell = tv; break; }
+              }
+              var isOpening = /balance\s+(brought\s+forward|b\/?f)|opening\s+balance/.test(descLow) || typeCell === "opening";
+              var isClosing = /balance\s+(carried\s+forward|c\/?f)|closing\s+balance/.test(descLow) || typeCell === "closing";
+              if (isOpening) {
+                if (balVal != null) { openingBalance = balVal; runningBalance = balVal; }
+                continue;
+              }
+              if (isClosing) {
+                if (balVal != null) closingBalance = balVal;
+                continue;
+              }
+              if (!desc && amount === 0) continue;
+              // Compute running balance when not explicitly present
+              if (balVal != null) {
+                runningBalance = balVal;
+              } else if (runningBalance != null) {
+                runningBalance = Math.round((runningBalance + (credit || 0) - (debit || 0)) * 100) / 100;
+                balVal = runningBalance;
+              }
+              var parsedDate = parseDateLocal(dateStr);
               allRows.push({
                 date: parsedDate || dateStr,
                 description: desc,
@@ -1269,6 +1298,10 @@ async function doUpload(file){
                 sheet: name,
                 balance: balVal
               });
+            }
+            // Attach opening/closing to parseStats for the app-level banner
+            if (openingBalance != null || closingBalance != null) {
+              sheetStats.push({ sheet: name, openingBalance: openingBalance, closingBalance: closingBalance });
             }
           });
           if (allRows.length === 0) { reject(new Error("No transactions found in file")); return; }
@@ -1285,8 +1318,14 @@ async function doUpload(file){
             catMap[cat].total += t.absAmount;
             catMap[cat].count++;
           });
+          var firstStats = sheetStats[0] || {};
           resolve({
             transactions: allRows,
+            parseStats: {
+              openingBalance: firstStats.openingBalance != null ? firstStats.openingBalance : null,
+              closingBalance: firstStats.closingBalance != null ? firstStats.closingBalance : null,
+              sheetStats: sheetStats
+            },
             analysis: {
               transactionCount: allRows.length,
               totalIncome: Math.round(totalIncome * 100) / 100,
@@ -1316,7 +1355,7 @@ async function doUpload(file){
       t.type=t.suggestedType==="Non-Transactional"?"Non-Transactional":"Expense";
       t.confirmed=false;
     });
-    data.parseStats=null;
+    // preserve parseStats from parser (opening/closing balance)
     if(D && D.transactions && D.transactions.length > 0){
       var existingKeys = new Set();
       D.transactions.forEach(function(t){
