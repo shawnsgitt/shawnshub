@@ -126,7 +126,8 @@ const CATEGORY_RULES = [
   { category: "Groceries", keywords: ["tesco", "sainsbury", "asda", "aldi", "lidl", "morrisons", "waitrose", "co-op", "coop", "ocado", "m&s food", "marks & spencer food", "iceland", "spar", "costco", "grocery", "supermarket", "farm foods", "whole foods", "wholefoods", "shoprite", "pick n pay", "checkers", "woolworths food", "food lover", "fruit & veg", "butcher", "bakery", "market", "fresh", "farmfoods", "heron foods", "jack's", "booths", "nisa"] },
   { category: "Eating Out", keywords: ["mcdonald", "burger king", "kfc", "nando", "pizza", "domino", "uber eats", "deliveroo", "just eat", "starbucks", "costa", "greggs", "pret", "subway", "restaurant", "cafe", "coffee", "takeaway", "wetherspoon", "wagamama", "five guys", "zizzi", "gourmet", "eat ", "dine", "dining", "food delivery", "grubhub", "doordash", "postmates", "chipotle", "taco bell", "wendy", "chick-fil-a", "popeyes", "panera", "dunkin", "tim horton", "sushi", "ramen", "kebab", "chicken", "grill", "steers", "wimpy", "debonairs", "roman's", "fishaways", "ocean basket", "spur", "mugg & bean", "vida e", "seattle coffee", "nero"] },
   { category: "Income", keywords: ["salary", "wages", "payroll", "refund", "cashback", "interest earned", "dividend", "freelance", "invoice paid", "pension", "benefit", "tax refund", "hmrc", "sars", "income", "commission", "bonus", "stipend", "bursary", "grant", "payout", "deposit from", "payment received", "credit received", "reversal", "reward"] },
-  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer", "transfer to", "send money", "remittance"] },
+  { category: "Family Support", keywords: ["taptap send", "taptap", "tap tap send", "wise ", "transferwise", "remitly", "worldremit", "world remit", "western union", "moneygram", "money gram", "sendwave", "xoom", "ria money", "azimo", "small world", "wari", "moneytransfer", "instarem", "zepz"] },
+  { category: "Cash Transfer", keywords: ["transfer between", "inter account", "interaccount", "internal transfer", "own account", "between accounts", "acc transfer", "account transfer", "move money", "move funds", "sweep", "self transfer", "same name transfer"] },
   { category: "Subscriptions", keywords: ["netflix", "spotify", "disney", "youtube premium", "apple music", "amazon prime", "hulu", "now tv", "sky ", "virgin media", "bt broadband", "audible", "adobe", "microsoft 365", "icloud", "google one", "playstation plus", "ps plus", "xbox game pass", "crunchyroll", "patreon", "chatgpt", "openai", "dstv", "showmax", "multichoice", "monthly sub", "subscription", "membership", "renewal", "recurring", "annual fee", "apple tv", "hbo", "paramount", "peacock", "deezer", "tidal", "canva", "notion", "dropbox", "github", "linkedin premium", "twitch"] },
   { category: "Bills & Utilities", keywords: ["electric", "gas ", "water", "council tax", "tv licence", "broadband", "internet", "phone bill", "mobile", "ee ", "vodafone", "three ", "o2 ", "giffgaff", "insurance", "rent ", "mortgage", "british gas", "edf", "eon", "octopus energy", "thames water", "scottish power", "bulb", "eskom", "city power", "city of johannesburg", "city of cape town", "rates", "levy", "body corporate", "municipal", "telkom", "mtn ", "cell c", "vodacom", "fibre", "wifi", "rain ", "afrihost", "webafrica", "nbn", "comcast", "at&t", "verizon", "spectrum", "strata", "property management", "maintenance fee", "service charge"] },
   { category: "Transport", keywords: ["tfl", "transport for london", "uber trip", "bolt", "lyft", "bus", "train", "rail", "fuel", "petrol", "diesel", "shell", "bp", "esso", "texaco", "parking", "congestion", "dart charge", "taxi", "national rail", "oyster", "go-ahead", "engen", "caltex", "sasol", "total garage", "garage", "tollgate", "toll", "e-toll", "etoll", "gautrain", "metrorail", "rea vaya", "myciti", "golden arrow", "car wash", "car service", "tyres", "motor", "vehicle", "aa ", "rac ", "mot test", "breakdown"] },
@@ -422,6 +423,9 @@ function suggestCategory(description) {
   if (/\b(balance carried|balance brought|balance c\/f|balance b\/f|opening balance|closing balance|carried forward|brought forward)\b/.test(lower)) return "Balance Carried Forward";
   if (/\b(transfer between|inter account|interaccount|internal transfer|own account|between accounts|acc transfer|self transfer|same name transfer|sweep|move money|move funds)\b/.test(lower)) return "Cash Transfer";
 
+  // ── Family Support / International Remittance — these are real outgoing expenses ──
+  if (/\b(tap\s*tap\s*send|taptap|remitly|worldremit|world\s+remit|western\s+union|moneygram|money\s+gram|sendwave|xoom|ria\s+money|azimo|small\s+world|instarem|zepz|transferwise|wise\s+payments?)\b/.test(lower)) return "Family Support";
+
   // ── Cash In / Deposits ──
   if (/\b(cash deposit|cash in|cash payment in|counter deposit|counter credit|branch deposit|cash at branch|cash lodgement|lodgement)\b/.test(lower)) return "Cash In";
 
@@ -497,8 +501,9 @@ function suggestCategory(description) {
   if (/\b(pos|point\s+of\s+sale|card\s+purchase|purchase|buy)\b/.test(lower)) return "Shopping";
   // Generic payments — if "pay" with no other context, likely bills
   if (/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
-  // Transfers without clear destination — treat as cash transfer
-  if (/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Cash Transfer";
+  // Explicit internal transfers only — outgoing "send" / "remit" to a named third
+  // party should NOT be classified as non-transactional.
+  if (/\b(internal\s+transfer|own\s+transfer|self\s+transfer|transfer\s+between|inter\s*account)\b/.test(lower)) return "Cash Transfer";
 
   return null;
 }

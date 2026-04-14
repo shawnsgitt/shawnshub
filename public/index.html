@@ -247,8 +247,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.85);border-
 </nav>
 
 <script>
-var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
-var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
+var CATS=["Groceries","Eating Out","Transport","Shopping","Subscriptions","Bills & Utilities","Health & Fitness","Entertainment","Education","Personal Care","Family Support","Cash Transfer","Income","Savings","Cash Withdrawal","Cash In","Bank Fees","Balance Carried Forward","Uncategorized"];
+var CC={"Groceries":"#22c55e","Transport":"#3b82f6","Eating Out":"#ef4444","Bills & Utilities":"#8b5cf6","Shopping":"#ec4899","Subscriptions":"#06b6d4","Education":"#6366f1","Health & Fitness":"#14b8a6","Entertainment":"#f59e0b","Personal Care":"#f472b6","Family Support":"#f43f5e","Income":"#22c55e","Savings":"#a855f7","Cash Withdrawal":"#78716c","Cash In":"#059669","Cash Transfer":"#475569","Bank Fees":"#dc2626","Balance Carried Forward":"#334155","Uncategorized":"#64748b","Pending Review":"#f59e0b"};
 function cc(n){return CC[n]||"#64748b"}
 function f(n){if(n==null||isNaN(n))return"£0";var sign=n<0?"-":"";return sign+"£"+Math.abs(Math.round(n)).toLocaleString("en-GB")}
 function txAmt(t){return t.absAmount!=null?t.absAmount:Math.abs(t.amount||0)}
@@ -1106,6 +1106,8 @@ function smartSuggest(desc,txns){
   if(/\b(balance carried|balance brought|balance c\/f|balance b\/f|balance c\/d|balance b\/d|opening balance|closing balance|carried forward|brought forward)\b/.test(lower)) return "Balance Carried Forward";
   // Cash transfers between own accounts
   if(/\b(transfer between|inter account|interaccount|internal transfer|own account|between accounts|acc transfer|account transfer|move money|move funds|sweep|self transfer|same name transfer)\b/.test(lower)) return "Cash Transfer";
+  // Family Support / International Remittance — real outgoing expenses
+  if(/\b(tap\s*tap\s*send|taptap|remitly|worldremit|world\s+remit|western\s+union|moneygram|money\s+gram|sendwave|xoom|ria\s+money|azimo|small\s+world|instarem|zepz|transferwise|wise\s+payments?)\b/.test(lower)) return "Family Support";
   // Cash in / deposits
   if(/\b(cash deposit|cash in|cash payment in|counter deposit|counter credit|branch deposit|cash at branch|cash lodgement|lodgement)\b/.test(lower)) return "Cash In";
   // Cash Withdrawal
@@ -1159,7 +1161,7 @@ function smartSuggest(desc,txns){
   // Fallback heuristics
   if(/\b(pos|point\s+of\s+sale|card\s+purchase)\b/.test(lower)) return "Shopping";
   if(/\b(pay|pymt|payment|debit\s+order|d\/o)\b/.test(lower)) return "Bills & Utilities";
-  if(/\b(transfer|trfr|eft|send|remit)\b/.test(lower)) return "Cash Transfer";
+  if(/\b(internal\s+transfer|own\s+transfer|self\s+transfer|transfer\s+between|inter\s*account)\b/.test(lower)) return "Cash Transfer";
   // Check amount patterns — very small recurring amounts might be subscriptions
   if(txns&&txns.length>=2){
     var amounts=txns.map(function(t){return txAmt(t)});
